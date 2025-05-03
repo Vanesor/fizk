@@ -27,6 +27,7 @@ import LoadingScreen from "@/components/LoadingScreen";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 const ec = new EC("secp256k1");
 
+// Helper functions (remain the same)
 const hexToBytes = (hex: string): Uint8Array => {
   if (hex.length % 2 !== 0) throw new Error("Invalid hex string length.");
   const bytes = new Uint8Array(hex.length / 2);
@@ -44,8 +45,10 @@ const renderMessage = (msg: unknown) => {
     return String(msg);
   }
 };
+// --- End Helper Functions ---
 
 export default function LoginPage() {
+  // State and Hooks (remain the same)
   const [init, setInit] = useState(false);
   const [particlesInitialized, setParticlesInitialized] = useState(false);
   const [mnemonicInput, setMnemonicInput] = useState("");
@@ -55,66 +58,54 @@ export default function LoginPage() {
   const [successMsg, setSuccessMsg] = useState("");
   const router = useRouter();
 
+  // useEffects and other functions (remain the same)
   useEffect(() => {
     let isMounted = true;
-    console.log("LoginPage: useEffect started");
-
     const safetyTimeout = setTimeout(() => {
-      if (isMounted && !init) {
-        console.warn("LoginPage: Safety timeout triggered - forcing init");
-        setInit(true);
-      }
+      if (isMounted && !init) setInit(true);
     }, 5000);
-
     const initialize = async () => {
       try {
-        console.log("LoginPage: Starting particles initialization");
         setInit(true);
         if (!particlesInitialized) {
           await initParticlesEngine(async (engine) => {
             await loadSlim(engine);
           });
-          if (isMounted) {
-            setParticlesInitialized(true);
-          }
+          if (isMounted) setParticlesInitialized(true);
         }
       } catch (err) {
-        console.error("LoginPage: Error in initialization:", err);
+        console.error("Error initializing particles:", err);
       }
     };
-
     initialize();
-
     return () => {
       isMounted = false;
       clearTimeout(safetyTimeout);
     };
   }, []);
 
-  const particlesInit = async (container?: Container): Promise<void> => {
-    console.log("Particles container loaded", container);
-  };
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const particlesInit = async (container?: Container): Promise<void> => {};
 
-  const ParticlesBackground = useMemo(() => {
-    return (
+  const ParticlesBackground = useMemo(
+    () => (
       <Particles
         id="tsparticles-login"
         particlesLoaded={particlesInit}
         options={particlesOptions}
         className="absolute inset-0 z-0"
       />
-    );
-  }, []);
+    ),
+    []
+  );
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setIsLoading(true);
     setErrorMsg("");
     setSuccessMsg("");
-
     let privateKeyBytes: Uint8Array;
     let publicKeyHex: string;
-
     try {
       const mnemonic = mnemonicInput.trim();
       if (!bip39.validateMnemonic(mnemonic))
@@ -129,7 +120,6 @@ export default function LoginPage() {
       setMnemonicInput("");
       return;
     }
-
     let challengeHex: string;
     try {
       const res = await axios.post<{ challengeHex: string }>(
@@ -150,7 +140,6 @@ export default function LoginPage() {
       setMnemonicInput("");
       return;
     }
-
     let signatureDER: string;
     try {
       const privateKeyInt = BigInt("0x" + bytesToHex(privateKeyBytes));
@@ -168,9 +157,7 @@ export default function LoginPage() {
       setIsLoading(false);
       return;
     }
-
     setMnemonicInput("");
-
     try {
       const loginRes = await axios.post(`${API_BASE_URL}/api/auth/login`, {
         pubkey: publicKeyHex,
@@ -178,7 +165,7 @@ export default function LoginPage() {
         challengeHex: challengeHex,
       });
       if (loginRes.data.success) {
-        setSuccessMsg(`Authentication successful! Welcome back.`);
+        setSuccessMsg(`Authentication successful! Redirecting...`);
         setTimeout(() => router.push("/home"), 1500);
       } else {
         setErrorMsg(renderMessage(loginRes.data.message || "Login failed."));
@@ -196,145 +183,145 @@ export default function LoginPage() {
   }
 
   if (!init) {
-    return <LoadingScreen message="Initializing Secure Environment..." />;
+    return <LoadingScreen message="Initializing..." />;
   }
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-gray-900 via-[#0a1025] to-[#111827] p-4">
-      <div
-        className="absolute inset-0 z-0 bg-gradient-radial from-transparent via-transparent to-black opacity-70"
-        style={{
-          background:
-            "radial-gradient(circle at center, rgba(6,8,24,0) 0%, rgba(6,8,24,0.5) 70%, rgba(2,4,10,0.95) 100%)",
-        }}
-      ></div>
+    <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-gray-900 to-gray-800 p-6 font-sans">
       {ParticlesBackground}
+      <div className="absolute inset-0 bg-black/40 z-0"></div>
 
-      <motion.div
-        className="relative z-10 w-full max-w-md bg-gray-900/70 backdrop-blur-lg rounded-xl shadow-2xl border border-gray-700/50 overflow-hidden"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
-      >
-        <div className="p-8 md:p-10">
-          {" "}
-          <div className="flex flex-col items-center mb-8">
-            <div className="relative mb-4">
-              <div className="absolute -inset-2 rounded-full bg-cyan-500/10 blur-lg"></div>
-              <KeyIcon className="relative h-12 w-12 text-cyan-400" />
-            </div>
-            <h2 className="text-2xl font-semibold text-center text-gray-100">
-              Secure Sign In
-            </h2>
-            <p className="text-center text-sm text-gray-400 mt-2">
-              Use your recovery phrase to access your account.
-            </p>
+      <div className="relative z-10 w-full max-w-sm flex flex-col items-center">
+        {/* Logo with increased margin */}
+        <div className="mb-10 flex items-center justify-center">
+          <div className="p-4 bg-blue-500/10 rounded-full">
+            <KeyIcon className="h-12 w-12 text-blue-400" />
           </div>
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div>
+        </div>
+
+        <motion.div
+          className="w-full bg-gray-50 dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-8 md:p-10"
+          initial={{ opacity: 0, y: -15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+        >
+          <h1 className="text-2xl font-semibold text-center text-gray-900 dark:text-white mb-10">
+            Sign in to your account
+          </h1>
+
+          <form onSubmit={handleLogin} className="space-y-8">
+            {" "}
+            {/* Increased spacing */}
+            <div className="space-y-3">
+              {" "}
+              {/* Container with spacing */}
               <label
                 htmlFor="mnemonic"
-                className="block text-sm font-medium text-gray-300 mb-2"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2.5"
               >
-                Recovery Phrase (12 Words)
+                Recovery Phrase
               </label>
               <div className="relative">
-                <textarea
+                <input
                   id="mnemonic"
-                  rows={3}
                   value={mnemonicInput}
                   onChange={(e) => setMnemonicInput(e.target.value)}
-                  className={`block w-full p-3 border rounded-md shadow-sm focus:ring-cyan-500 focus:border-cyan-500 bg-gray-800 text-gray-100 transition placeholder-gray-500 border-gray-600 font-mono text-sm resize-none ${
-                    isMnemonicVisible ? "" : "blur-[4px]"
-                  }`}
-                  placeholder="Enter your 12-word phrase..."
+                  className={`block w-full h-10 p-4 border rounded-lg shadow-sm 
+                             bg-gray-100 dark:bg-gray-700 
+                             text-gray-900 dark:text-gray-100 
+                             placeholder-gray-400 dark:placeholder-gray-500 
+                             border-gray-300 dark:border-gray-600 
+                             font-mono text-sm resize-none transition-all duration-200
+                             hover:border-blue-400 dark:hover:border-blue-500
+                             focus:border-blue-500 focus:ring-4 focus:ring-blue-500/30 focus:ring-opacity-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/20
+                             ${isMnemonicVisible ? "" : "blur-[3px]"}`}
+                  placeholder="Enter your 12-word recovery phrase..."
                   spellCheck="false"
                   required
                   readOnly={isLoading}
-                  style={{ filter: isMnemonicVisible ? "none" : "blur(4px)" }}
+                  style={{ filter: isMnemonicVisible ? "none" : "blur(3px)" }}
                 />
                 <button
                   type="button"
                   onClick={() => setIsMnemonicVisible(!isMnemonicVisible)}
-                  className="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-cyan-300 rounded-full bg-gray-700/50 hover:bg-gray-600/70 transition-colors duration-200"
+                  className="absolute bottom-10 right-3 p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-md bg-gray-200/50 dark:bg-gray-600/50 hover:bg-gray-300/70 dark:hover:bg-gray-500/70 transition-colors duration-150"
                   aria-label={isMnemonicVisible ? "Hide phrase" : "Show phrase"}
                 >
                   {isMnemonicVisible ? (
-                    <EyeSlashIcon className="h-5 w-5" />
+                    <EyeSlashIcon className="h-5 w-5 " />
                   ) : (
                     <EyeIcon className="h-5 w-5" />
                   )}
                 </button>
               </div>
-              <p className="mt-2 text-xs text-gray-400 flex items-start">
-                <ExclamationTriangleIcon className="w-3.5 h-3.5 mr-1.5 mt-0.5 flex-shrink-0 text-amber-400" />
-                Phrase is used locally to sign in, never sent to the server.
+              <p className="mt-3 text-xs text-gray-500 dark:text-gray-400 px-1">
+                Enter the 12 words in the correct order.
               </p>
             </div>
-
-            <motion.div
-              className="h-5 text-center text-sm"
-              initial={false}
-              animate={
-                errorMsg || successMsg
-                  ? { opacity: 1, y: 0, height: "auto" }
-                  : { opacity: 0, y: -5, height: "1.25rem" }
-              }
-              transition={{ duration: 0.3 }}
-            >
+            {/* Status Messages Area */}
+            <div className="h-6 text-center text-sm pt-2 pb-3">
+              {" "}
+              {/* Added padding */}
               {errorMsg && (
-                <p className="text-red-400 flex items-center justify-center">
-                  <ExclamationTriangleIcon className="w-4 h-4 mr-1.5" />
+                <p className="text-red-600 dark:text-red-400 flex items-center justify-center text-xs">
+                  <ExclamationTriangleIcon className="w-4 h-4 mr-2 inline" />
                   {renderMessage(errorMsg)}
                 </p>
               )}
               {successMsg && (
-                <p className="text-green-400 flex items-center justify-center">
-                  <CheckCircleIcon className="w-4 h-4 mr-1.5" />
+                <p className="text-green-600 dark:text-green-400 flex items-center justify-center text-xs">
+                  <CheckCircleIcon className="w-4 h-4 mr-2 inline" />
                   {renderMessage(successMsg)}
                 </p>
               )}
-            </motion.div>
-
+            </div>
+            {/* Submit Button */}
             <motion.button
               type="submit"
               disabled={isLoading || !mnemonicInput}
-              className="w-full flex justify-center items-center bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-60 disabled:cursor-not-allowed text-white py-2.5 px-4 border border-transparent rounded-md shadow-md text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 focus:ring-offset-gray-900 transition-all duration-200 ease-out"
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.99 }}
+              className="w-full flex justify-center items-center 
+                         bg-gradient-to-r from-blue-600 to-blue-500
+                         hover:from-blue-500 hover:to-blue-400 
+                         disabled:from-blue-400 disabled:to-blue-300 dark:disabled:from-blue-800 dark:disabled:to-blue-700 
+                         disabled:opacity-70 disabled:cursor-not-allowed 
+                         text-white py-4 px-6 rounded-lg shadow-lg 
+                         text-base font-medium 
+                         focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-gray-800 
+                         transition-all duration-200 ease-out mt-4" /* Enhanced button */
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.98 }}
             >
               {isLoading ? (
                 <>
-                  <ArrowPathIcon className="animate-spin h-4 w-4 mr-2" />
-                  Authenticating...
+                  <ArrowPathIcon className="animate-spin h-5 w-5 mr-2.5" />{" "}
+                  {/* Larger icon */}
+                  Signing In...
                 </>
               ) : (
-                "Sign In Securely"
+                "Sign In"
               )}
             </motion.button>
           </form>
-          <div className="mt-8 text-center">
-            <div className="relative my-4">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-700"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-gray-900/70 text-gray-500">
-                  New User?
-                </span>
-              </div>
-            </div>
-            <p className="text-sm text-gray-400">
-              <Link
-                href="/signup"
-                className="font-medium text-cyan-400 hover:text-cyan-300 hover:underline transition duration-150 ease-in-out"
-              >
-                Create an account
-              </Link>
-            </p>
-          </div>
-        </div>
-      </motion.div>
+        </motion.div>
+
+        {/* Sign Up Link Box */}
+        <motion.div
+          className="w-full mt-8 border border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center bg-gray-50 dark:bg-gray-800/50" // Increased margin and padding
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
+        >
+          <p className="text-sm text-gray-700 dark:text-gray-300">
+            New here?{" "}
+            <Link
+              href="/signup"
+              className="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300 hover:underline"
+            >
+              Create an account
+            </Link>
+          </p>
+        </motion.div>
+      </div>
     </div>
   );
 }

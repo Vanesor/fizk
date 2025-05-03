@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import axios from "axios";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
@@ -11,6 +11,8 @@ import {
   EyeSlashIcon,
   UserPlusIcon,
   ClipboardDocumentIcon,
+  ChevronRightIcon,
+  LockClosedIcon,
 } from "@heroicons/react/24/solid";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -27,6 +29,7 @@ import LoadingScreen from "@/components/LoadingScreen";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Helper functions (remain the same)
 const renderMessage = (msg: unknown) => {
   if (typeof msg === "string") return msg;
   try {
@@ -35,8 +38,10 @@ const renderMessage = (msg: unknown) => {
     return String(msg);
   }
 };
+// --- End Helper Functions ---
 
 export default function SignupPage() {
+  // State and Hooks (remain the same)
   const [init, setInit] = useState(false);
   const [particlesInitialized, setParticlesInitialized] = useState(false);
   const [username, setUsername] = useState("");
@@ -50,60 +55,50 @@ export default function SignupPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [currentStep, setCurrentStep] = useState(1);
   const router = useRouter();
 
+  // useEffects and other functions (remain the same)
   useEffect(() => {
     let isMounted = true;
-    console.log("SignupPage: useEffect started.");
-
-    // Safety timeout - will ensure loading screen disappears after 5 seconds
     const safetyTimeout = setTimeout(() => {
-      if (isMounted && !init) {
-        console.warn("SignupPage: Safety timeout triggered - forcing init");
-        setInit(true);
-      }
+      if (isMounted && !init) setInit(true);
     }, 5000);
-
     const initialize = async () => {
       try {
-        console.log("SignupPage: Starting particles initialization");
         setInit(true);
         if (!particlesInitialized) {
           await initParticlesEngine(async (engine) => {
             await loadSlim(engine);
           });
-          if (isMounted) {
-            setParticlesInitialized(true);
-          }
+          if (isMounted) setParticlesInitialized(true);
         }
       } catch (err) {
-        console.error("SignupPage: Error in initialization:", err);
+        console.error("Error initializing particles:", err);
       }
     };
-
     initialize();
-
     return () => {
-      console.log("SignupPage: useEffect cleanup - component unmounted.");
       isMounted = false;
       clearTimeout(safetyTimeout);
     };
   }, []);
 
-  const particlesInit = async (container?: Container): Promise<void> => {
-    console.log("Particles container loaded", container);
-  };
+  // Functions (remain the same)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const particlesInit = async (container?: Container): Promise<void> => {};
 
-  const ParticlesBackground = useMemo(() => {
-    return (
+  const ParticlesBackground = useMemo(
+    () => (
       <Particles
         id="tsparticles-signup"
         particlesLoaded={particlesInit}
         options={particlesOptions}
         className="absolute inset-0 z-0"
       />
-    );
-  }, []);
+    ),
+    []
+  );
 
   useEffect(() => {
     setIsFetchingMnemonics(true);
@@ -112,9 +107,6 @@ export default function SignupPage() {
       .then((res) => {
         const mnemonics = res.data.mnemonics || [];
         setGeneratedMnemonics(mnemonics);
-        if (mnemonics.length > 0) {
-          setSelectedMnemonic(mnemonics[0]);
-        }
       })
       .catch((err: unknown) => {
         console.error("Failed to fetch mnemonics:", err);
@@ -132,9 +124,47 @@ export default function SignupPage() {
     });
   };
 
+  const validateCurrentStep = (): boolean => {
+    setErrorMsg("");
+    if (currentStep === 1) {
+      if (!selectedMnemonic) {
+        setErrorMsg("Please select a recovery phrase.");
+        return false;
+      }
+    } else if (currentStep === 2) {
+      if (!username.trim() || username.length < 3) {
+        setErrorMsg("Username must be at least 3 characters.");
+        return false;
+      }
+      if (!email.trim() || !EMAIL_REGEX.test(email)) {
+        setErrorMsg("Please enter a valid email address.");
+        return false;
+      }
+      if (!password || password.length < 8) {
+        setErrorMsg("Password must be at least 8 characters.");
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const handleNextStep = () => {
+    if (validateCurrentStep()) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
+  const handlePrevStep = () => {
+    setCurrentStep(currentStep - 1);
+  };
+
   const validateForm = (): boolean => {
+    setErrorMsg("");
+    if (!selectedMnemonic) {
+      setErrorMsg("Recovery phrase not selected.");
+      return false;
+    }
     if (!username.trim() || username.length < 3) {
-      setErrorMsg("Username must be at least 3 characters long.");
+      setErrorMsg("Username must be at least 3 characters.");
       return false;
     }
     if (!email.trim() || !EMAIL_REGEX.test(email)) {
@@ -142,14 +172,9 @@ export default function SignupPage() {
       return false;
     }
     if (!password || password.length < 8) {
-      setErrorMsg("Password must be at least 8 characters long.");
+      setErrorMsg("Password must be at least 8 characters.");
       return false;
     }
-    if (!selectedMnemonic) {
-      setErrorMsg("Please select or generate a recovery phrase.");
-      return false;
-    }
-    setErrorMsg("");
     return true;
   };
 
@@ -163,7 +188,6 @@ export default function SignupPage() {
     try {
       if (!bip39.validateMnemonic(selectedMnemonic))
         throw new Error("Selected recovery phrase is invalid.");
-
       const seed = await bip39.mnemonicToSeed(selectedMnemonic);
       const privateKeyBytes = new Uint8Array(seed).slice(0, 32);
       const publicKeyBytes = getPublicKey(privateKeyBytes, true);
@@ -171,27 +195,22 @@ export default function SignupPage() {
       const passwordBytes = new TextEncoder().encode(password);
       const hashedPasswordBytes = sha256(passwordBytes);
       const hashedPassword = bytesToHex(hashedPasswordBytes);
-
       const signupPayload = {
         username,
         email,
         hashed_password: hashedPassword,
         pubkey: publicKeyHex,
       };
-
       const response = await axios.post<{ success: boolean; message: string }>(
         `${API_BASE_URL}/api/auth/signup`,
         signupPayload
       );
-
       if (response.status === 201 && response.data.success) {
-        setSuccessMsg(
-          "Signup successful! IMPORTANT: Ensure you saved your recovery phrase! Redirecting..."
-        );
+        setSuccessMsg("Account created! Redirecting to login...");
         setPassword("");
         setTimeout(() => {
           router.push("/");
-        }, 3500);
+        }, 2500);
       } else {
         setErrorMsg(response.data.message || "Signup failed on the server.");
       }
@@ -210,259 +229,417 @@ export default function SignupPage() {
       setIsLoading(false);
     }
   }
+  // --- End Functions ---
 
   if (!init) {
     return <LoadingScreen message="Preparing Signup..." />;
   }
 
-  return (
-    <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-gray-900 via-[#0a1829] to-[#111827] py-10 px-4">
+  const stepIndicator = (
+    stepNum: number,
+    label: string,
+    Icon: React.ElementType
+  ) => (
+    <div
+      className={`flex items-center transition-colors duration-300 ${
+        currentStep === stepNum
+          ? "text-blue-600 dark:text-blue-400"
+          : "text-gray-500 dark:text-gray-400"
+      }`}
+    >
       <div
-        className="absolute inset-0 z-0 bg-gradient-radial from-transparent via-transparent to-black opacity-70"
-        style={{
-          background:
-            "radial-gradient(circle at center, rgba(6,8,24,0) 0%, rgba(4,10,24,0.5) 70%, rgba(2,6,12,0.95) 100%)",
-        }}
-      ></div>
-      {ParticlesBackground}
-
-      <motion.div
-        className="relative z-10 w-full max-w-2xl bg-gray-900/70 backdrop-blur-lg rounded-xl shadow-2xl border border-gray-700/50 overflow-hidden"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
+        className={`flex items-center justify-center h-8 w-8 rounded-full mr-2.5 transition-colors duration-300 ${
+          currentStep === stepNum
+            ? "bg-blue-100 dark:bg-blue-900/30"
+            : currentStep > stepNum
+            ? "bg-green-100 dark:bg-green-900/30"
+            : "bg-gray-100 dark:bg-gray-700/50"
+        }`}
       >
-        <div className="p-8 md:p-10">
-          {" "}
-          <div className="flex flex-col items-center mb-8">
-            <div className="relative mb-4">
-              <div className="absolute -inset-2 rounded-full bg-teal-500/10 blur-lg"></div>
-              <UserPlusIcon className="relative h-12 w-12 text-teal-400" />
-            </div>
-            <h2 className="text-2xl font-semibold text-center text-gray-100">
-              Create Account
-            </h2>
-            <p className="text-center text-sm text-gray-400 mt-2">
-              Secure your account with a recovery phrase.
-            </p>
-          </div>
-          <div className="mb-8 space-y-4">
-            <h3 className="text-base font-semibold text-teal-300 flex items-center">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-teal-800 text-teal-300 mr-2.5 text-xs font-bold">
-                1
-              </span>
-              Choose & Save Recovery Phrase
-            </h3>
-            <p className="pl-7 text-xs text-gray-400 flex items-start">
-              <ExclamationTriangleIcon className="w-3.5 h-3.5 mr-1.5 mt-0.5 flex-shrink-0 text-amber-400" />
-              <span>
-                <span className="font-semibold text-amber-300">CRITICAL:</span>{" "}
-                Store this phrase securely offline. It&apos;s your only recovery
-                method.
-              </span>
-            </p>
-            {isFetchingMnemonics ? (
-              <div className="flex items-center justify-center h-24 text-gray-400 text-sm">
-                <ArrowPathIcon className="animate-spin h-5 w-5 mr-2 text-teal-500/70" />
-                Loading phrase options...
-              </div>
-            ) : generatedMnemonics.length > 0 ? (
-              <div className="space-y-3 pl-7">
-                {generatedMnemonics.map((mnemonic, index) => (
-                  <motion.label
-                    key={index}
-                    htmlFor={`mnemonic-${index}`}
-                    className={`relative block p-3 pr-10 border rounded-md cursor-pointer transition-colors duration-200 ${
-                      selectedMnemonic === mnemonic
-                        ? "border-teal-600 bg-teal-900/30 ring-1 ring-teal-600/50"
-                        : "border-gray-600 hover:bg-gray-700/40"
-                    }`}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.05 * index }}
-                  >
-                    <input
-                      type="radio"
-                      id={`mnemonic-${index}`}
-                      name="mnemonicChoice"
-                      value={mnemonic}
-                      checked={selectedMnemonic === mnemonic}
-                      onChange={() => setSelectedMnemonic(mnemonic)}
-                      className="sr-only"
-                    />
-                    <span className="text-xs font-mono text-gray-300 tracking-wider leading-relaxed break-words">
-                      {mnemonic}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopyToClipboard(mnemonic, index)}
-                      className="absolute top-1/2 right-2 transform -translate-y-1/2 p-1 text-gray-400 hover:text-teal-300 rounded-md bg-gray-700/50 hover:bg-gray-600/70 transition-colors duration-200"
-                      aria-label="Copy phrase"
-                    >
-                      {copiedIndex === index ? (
-                        <CheckCircleIcon className="h-4 w-4 text-green-400" />
-                      ) : (
-                        <ClipboardDocumentIcon className="h-4 w-4" />
-                      )}
-                    </button>
-                  </motion.label>
-                ))}
-              </div>
-            ) : (
-              <div className="pl-7 text-sm text-red-400 bg-red-900/20 border border-red-800/30 rounded-md p-3 flex items-center justify-center">
-                <ExclamationTriangleIcon className="h-4 w-4 mr-2" />
-                Failed to load recovery phrases. Please refresh.
-              </div>
-            )}
-          </div>
-          <form onSubmit={handleSignup} className="space-y-5">
-            <h3 className="text-base font-semibold text-teal-300 flex items-center">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-teal-800 text-teal-300 mr-2.5 text-xs font-bold">
-                2
-              </span>
-              Enter Account Details
-            </h3>
-            <div className="grid gap-4 md:grid-cols-2 pl-7">
-              <div>
-                <label
-                  htmlFor="username"
-                  className="block text-xs font-medium text-gray-300 mb-1.5"
-                >
-                  Username
-                </label>
-                <input
-                  id="username"
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  required
-                  minLength={3}
-                  className="block w-full p-2.5 border rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500 bg-gray-800 text-gray-100 text-sm border-gray-600 placeholder-gray-500"
-                  placeholder="Choose a username"
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="email"
-                  className="block text-xs font-medium text-gray-300 mb-1.5"
-                >
-                  Email Address
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="block w-full p-2.5 border rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500 bg-gray-800 text-gray-100 text-sm border-gray-600 placeholder-gray-500"
-                  placeholder="your@email.com"
-                />
-              </div>
-              <div className="relative md:col-span-2">
-                <label
-                  htmlFor="password"
-                  className="block text-xs font-medium text-gray-300 mb-1.5"
-                >
-                  Password
-                </label>
-                <div className="relative">
-                  <input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    minLength={8}
-                    className="block w-full p-2.5 border rounded-md shadow-sm focus:ring-teal-500 focus:border-teal-500 bg-gray-800 text-gray-100 text-sm border-gray-600 placeholder-gray-500 pr-10"
-                    placeholder="Create a strong password (min. 8 characters)"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-teal-300"
-                    aria-label={
-                      showPassword ? "Hide password" : "Show password"
-                    }
-                  >
-                    {showPassword ? (
-                      <EyeSlashIcon className="h-4 w-4" />
-                    ) : (
-                      <EyeIcon className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-                <p className="mt-1.5 text-xs text-amber-400/90 flex items-center">
-                  <ExclamationTriangleIcon className="w-3.5 h-3.5 mr-1.5 flex-shrink-0" />
-                  Warning: Password hashed locally (insecure demo).
-                </p>
-              </div>
-            </div>
+        <Icon
+          className={`h-4 w-4 transition-colors duration-300 ${
+            currentStep > stepNum ? "text-green-600 dark:text-green-400" : ""
+          }`}
+        />
+      </div>
+      <span
+        className={`text-sm font-medium ${
+          currentStep === stepNum ? "font-semibold" : ""
+        }`}
+      >
+        {label}
+      </span>
+    </div>
+  );
 
-            <motion.div
-              className="h-5 text-center text-sm pl-7"
-              initial={false}
-              animate={
-                errorMsg || successMsg
-                  ? { opacity: 1, y: 0, height: "auto" }
-                  : { opacity: 0, y: -5, height: "1.25rem" }
-              }
-              transition={{ duration: 0.3 }}
-            >
-              {errorMsg && (
-                <p className="text-red-400 flex items-center justify-center">
-                  <ExclamationTriangleIcon className="w-4 h-4 mr-1.5" />
-                  {renderMessage(errorMsg)}
-                </p>
-              )}
-              {successMsg && (
-                <p className="text-green-400 flex items-center justify-center text-center">
-                  <CheckCircleIcon className="w-4 h-4 mr-1.5 flex-shrink-0" />
-                  {renderMessage(successMsg)}
-                </p>
-              )}
-            </motion.div>
+  return (
+    <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-gray-900 to-gray-800 p-6 font-sans">
+      {ParticlesBackground}
+      <div className="absolute inset-0 bg-black/40 z-0"></div>
 
-            <div className="pl-7 pt-2">
-              <motion.button
-                type="submit"
-                disabled={isLoading || isFetchingMnemonics || !selectedMnemonic}
-                className="w-full flex justify-center items-center bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-500 hover:to-cyan-500 disabled:opacity-60 disabled:cursor-not-allowed text-white py-2.5 px-4 border border-transparent rounded-md shadow-md text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 focus:ring-offset-gray-900 transition-all duration-200 ease-out"
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.99 }}
-              >
-                {isLoading ? (
-                  <>
-                    <ArrowPathIcon className="animate-spin h-4 w-4 mr-2" />
-                    Creating Account...
-                  </>
-                ) : (
-                  "Create Account"
-                )}
-              </motion.button>
-            </div>
-          </form>
-          <div className="mt-8 text-center">
-            <div className="relative my-4">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-700"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-gray-900/70 text-gray-500">
-                  Already Registered?
-                </span>
-              </div>
-            </div>
-            <p className="text-sm text-gray-400">
-              <Link
-                href="/"
-                className="font-medium text-teal-400 hover:text-teal-300 hover:underline transition duration-150 ease-in-out"
-              >
-                Sign in here
-              </Link>
-            </p>
+      <div className="relative z-10 w-full max-w-lg flex flex-col items-center">
+        {/* Icon with enhanced presentation */}
+        <div className="mb-10 flex items-center justify-center">
+          <div className="p-4 bg-blue-500/10 rounded-full">
+            <UserPlusIcon className="h-12 w-12 text-blue-400" />
           </div>
         </div>
-      </motion.div>
+
+        <motion.div
+          className="w-full bg-gray-50 dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700"
+          initial={{ opacity: 0, y: -15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+        >
+          {/* Header within the card */}
+          <div className="p-8 md:p-10 border-b border-gray-200 dark:border-gray-700">
+            <h1 className="text-2xl font-semibold text-center text-gray-900 dark:text-white mb-8">
+              Create your account
+            </h1>
+            <div className="flex items-center justify-center space-x-8">
+              {" "}
+              {/* Increased spacing */}
+              {stepIndicator(1, "Recovery Phrase", LockClosedIcon)}
+              <div className="w-12 h-0.5 bg-gray-300 dark:bg-gray-600 relative">
+                <div
+                  className={`absolute inset-0 bg-blue-500 transition-all duration-500 ${
+                    currentStep > 1 ? "w-full" : "w-0"
+                  }`}
+                ></div>
+              </div>
+              {stepIndicator(2, "Account Details", UserPlusIcon)}
+            </div>
+          </div>
+
+          {/* Form Content Area */}
+          <div className="p-8 md:p-10">
+            <AnimatePresence mode="wait">
+              {/* Step 1: Recovery Phrase */}
+              {currentStep === 1 && (
+                <motion.div
+                  key="step1"
+                  initial={{ opacity: 0, x: -15 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 15 }}
+                  transition={{ duration: 0.25, ease: "easeInOut" }}
+                  className="space-y-8" // Increased spacing
+                >
+                  <div className="flex items-start p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-700/30">
+                    {" "}
+                    {/* Enhanced warning box */}
+                    <ExclamationTriangleIcon className="w-6 h-6 mt-0.5 mr-3.5 flex-shrink-0 text-yellow-600 dark:text-yellow-400" />{" "}
+                    {/* Larger icon, more margin */}
+                    <div className="space-y-1.5">
+                      {" "}
+                      {/* Added container with spacing */}
+                      <p className="font-semibold text-sm text-yellow-800 dark:text-yellow-300">
+                        Important Security Information
+                      </p>
+                      <p className="text-xs text-yellow-700 dark:text-yellow-200 leading-relaxed">
+                        Write down this 12-word phrase and store it securely
+                        offline. This is the{" "}
+                        <span className="font-semibold">ONLY</span> way to
+                        recover your account. Never share it.
+                      </p>
+                    </div>
+                  </div>
+
+                  {isFetchingMnemonics ? (
+                    <div className="flex flex-col items-center justify-center h-40 text-gray-500 dark:text-gray-400">
+                      {" "}
+                      {/* Increased height, added flex-col */}
+                      <ArrowPathIcon className="animate-spin h-6 w-6 mb-3" />{" "}
+                      {/* Larger icon with margin */}
+                      <p>Loading recovery phrases...</p>
+                    </div>
+                  ) : generatedMnemonics.length > 0 ? (
+                    <fieldset className="space-y-4">
+                      {" "}
+                      {/* Increased spacing */}
+                      <legend className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 px-1">
+                        Select your recovery phrase:
+                      </legend>
+                      <div className="space-y-4">
+                        {" "}
+                        {/* Container with spacing */}
+                        {generatedMnemonics.map((mnemonic, index) => (
+                          <label
+                            key={index}
+                            htmlFor={`mnemonic-${index}`}
+                            className={`relative flex items-center p-4 border rounded-lg cursor-pointer transition-all duration-200 
+                                       ${
+                                         selectedMnemonic === mnemonic
+                                           ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30 ring-2 ring-blue-500/40 shadow-md" // Enhanced selected state
+                                           : "border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/30 hover:border-gray-400 dark:hover:border-gray-500 hover:shadow-sm" // Enhanced hover
+                                       }`}
+                          >
+                            <input
+                              type="radio"
+                              id={`mnemonic-${index}`}
+                              name="mnemonicChoice"
+                              value={mnemonic}
+                              checked={selectedMnemonic === mnemonic}
+                              onChange={() => setSelectedMnemonic(mnemonic)}
+                              className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500 mr-4" // Increased margin
+                            />
+                            <span className="text-sm font-mono text-gray-800 dark:text-gray-200 tracking-wide leading-relaxed break-words flex-grow">
+                              {mnemonic}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleCopyToClipboard(mnemonic, index);
+                              }}
+                              className="ml-4 flex-shrink-0 p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-md bg-gray-200/70 dark:bg-gray-600/70 hover:bg-gray-300/80 dark:hover:bg-gray-500/80 transition-colors duration-150"
+                              aria-label="Copy phrase"
+                            >
+                              {copiedIndex === index ? (
+                                <CheckCircleIcon className="h-5 w-5 text-green-500" /> // Larger icon
+                              ) : (
+                                <ClipboardDocumentIcon className="h-5 w-5" /> // Larger icon
+                              )}
+                            </button>
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
+                  ) : (
+                    <div className="flex items-center justify-center p-6 bg-red-50 dark:bg-red-900/10 text-sm text-center text-red-600 dark:text-red-400 rounded-lg border border-red-200 dark:border-red-800/30">
+                      <ExclamationTriangleIcon className="h-5 w-5 mr-2.5" />
+                      Failed to load phrases. Please refresh.
+                    </div>
+                  )}
+
+                  {/* Error Message with better spacing */}
+                  {errorMsg && currentStep === 1 && (
+                    <div className="px-1 pt-2">
+                      <p className="text-red-600 dark:text-red-400 text-xs text-center flex items-center justify-center">
+                        <ExclamationTriangleIcon className="w-4 h-4 mr-1.5 inline" />
+                        {renderMessage(errorMsg)}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Next button with enhanced style */}
+                  <motion.button
+                    type="button"
+                    disabled={!selectedMnemonic || isFetchingMnemonics}
+                    onClick={handleNextStep}
+                    className="w-full flex justify-center items-center 
+                               bg-gradient-to-r from-blue-600 to-blue-500
+                               hover:from-blue-500 hover:to-blue-400 
+                               disabled:from-blue-400 disabled:to-blue-300 dark:disabled:from-blue-800 dark:disabled:to-blue-700
+                               disabled:opacity-70 disabled:cursor-not-allowed 
+                               text-white py-4 px-6 rounded-lg shadow-lg 
+                               text-base font-medium 
+                               focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-gray-800 
+                               transition-all duration-200 ease-out mt-6"
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    Continue to Account Details{" "}
+                    <ChevronRightIcon className="h-5 w-5 ml-1.5" />{" "}
+                    {/* Larger icon */}
+                  </motion.button>
+                </motion.div>
+              )}
+
+              {/* Step 2: Account Details */}
+              {currentStep === 2 && (
+                <motion.form
+                  key="step2"
+                  initial={{ opacity: 0, x: 15 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -15 }}
+                  transition={{ duration: 0.25, ease: "easeInOut" }}
+                  onSubmit={handleSignup}
+                  className="space-y-6" // Increased spacing
+                >
+                  <div className="space-y-6">
+                    {" "}
+                    {/* Container with spacing */}
+                    <div className="space-y-1.5">
+                      {" "}
+                      {/* Field container with spacing */}
+                      <label
+                        htmlFor="username"
+                        className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
+                      >
+                        Username
+                      </label>
+                      <input
+                        id="username"
+                        type="text"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        required
+                        minLength={3}
+                        className="block w-full p-3.5 border rounded-lg shadow-sm 
+                                  bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 
+                                  placeholder-gray-400 dark:placeholder-gray-500 
+                                  border-gray-300 dark:border-gray-600 text-sm transition-all duration-200
+                                  hover:border-gray-400 dark:hover:border-gray-500
+                                  focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 focus:ring-opacity-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/20" // Enhanced focus
+                        placeholder="Choose a username"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      {" "}
+                      {/* Field container with spacing */}
+                      <label
+                        htmlFor="email"
+                        className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
+                      >
+                        Email Address
+                      </label>
+                      <input
+                        id="email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        className="block w-full p-3.5 border rounded-lg shadow-sm 
+                                  bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 
+                                  placeholder-gray-400 dark:placeholder-gray-500 
+                                  border-gray-300 dark:border-gray-600 text-sm transition-all duration-200
+                                  hover:border-gray-400 dark:hover:border-gray-500
+                                  focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 focus:ring-opacity-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/20" // Enhanced focus
+                        placeholder="your@email.com"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      {" "}
+                      {/* Field container with spacing */}
+                      <label
+                        htmlFor="password"
+                        className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
+                      >
+                        Password
+                      </label>
+                      <div className="relative">
+                        <input
+                          id="password"
+                          type={showPassword ? "text" : "password"}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          required
+                          minLength={8}
+                          className="block w-full p-3.5 border rounded-lg shadow-sm 
+                                    bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 
+                                    placeholder-gray-400 dark:placeholder-gray-500 
+                                    border-gray-300 dark:border-gray-600 text-sm pr-12 transition-all duration-200
+                                    hover:border-gray-400 dark:hover:border-gray-500
+                                    focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 focus:ring-opacity-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/20" // Enhanced focus, increased padding-right
+                          placeholder="Create a strong password (min. 8 characters)"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 bottom-1/2 -translate-y-1/2 p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-md transition-colors duration-150"
+                          aria-label={
+                            showPassword ? "Hide password" : "Show password"
+                          }
+                        >
+                          {showPassword ? (
+                            <EyeSlashIcon className="h-5 w-5" />
+                          ) : (
+                            <EyeIcon className="h-5 w-5" />
+                          )}{" "}
+                          {/* Larger icons */}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Status Messages Area */}
+                  <div className="h-6 text-center text-sm py-2">
+                    {" "}
+                    {/* Added padding */}
+                    {errorMsg && currentStep === 2 && (
+                      <p className="text-red-600 dark:text-red-400 flex items-center justify-center text-xs">
+                        <ExclamationTriangleIcon className="w-4 h-4 mr-2 inline" />
+                        {renderMessage(errorMsg)}
+                      </p>
+                    )}
+                    {successMsg && (
+                      <p className="text-green-600 dark:text-green-400 flex items-center justify-center text-xs">
+                        <CheckCircleIcon className="w-4 h-4 mr-2 inline" />
+                        {renderMessage(successMsg)}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Button Group with better spacing and differentiated buttons */}
+                  <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-5 pt-4">
+                    {" "}
+                    {/* Increased spacing */}
+                    <motion.button
+                      type="button"
+                      onClick={handlePrevStep}
+                      className="w-full sm:w-1/3 flex justify-center items-center 
+                                border border-gray-300 dark:border-gray-600
+                                bg-transparent hover:bg-gray-100 dark:hover:bg-gray-700/50
+                                text-gray-700 dark:text-gray-300
+                                py-4 px-5 rounded-lg shadow-sm 
+                                text-base font-medium 
+                                focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 dark:focus:ring-offset-gray-800 
+                                transition-colors duration-200" // Transparent background, distinct style
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      Back
+                    </motion.button>
+                    <motion.button
+                      type="submit"
+                      disabled={isLoading}
+                      className="w-full sm:w-2/3 flex justify-center items-center 
+                                bg-gradient-to-r from-blue-600 to-blue-500
+                                hover:from-blue-500 hover:to-blue-400
+                                disabled:from-blue-400 disabled:to-blue-300 dark:disabled:from-blue-800 dark:disabled:to-blue-700
+                                disabled:opacity-70 disabled:cursor-not-allowed 
+                                text-white py-4 px-5 rounded-lg shadow-lg
+                                text-base font-medium 
+                                focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-gray-800 
+                                transition-all duration-200 ease-out" // Enhanced primary button
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      {isLoading ? (
+                        <>
+                          <ArrowPathIcon className="animate-spin h-5 w-5 mr-2.5" />{" "}
+                          {/* Larger icon with margin */}
+                          Creating Account...
+                        </>
+                      ) : (
+                        "Create Account"
+                      )}
+                    </motion.button>
+                  </div>
+                </motion.form>
+              )}
+            </AnimatePresence>
+          </div>
+        </motion.div>
+
+        {/* Sign In Link Box */}
+        <motion.div
+          className="w-full mt-8 text-center bg-white/5 backdrop-blur-sm rounded-lg p-6 border border-gray-300/20 dark:border-gray-600/20" // Enhanced styling
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
+        >
+          <p className="text-sm text-gray-300">
+            Already have an account?{" "}
+            <Link
+              href="/"
+              className="font-medium text-blue-400 hover:text-blue-300 hover:underline transition-colors duration-150"
+            >
+              Sign in
+            </Link>
+          </p>
+        </motion.div>
+      </div>
     </div>
   );
 }
