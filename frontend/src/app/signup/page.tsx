@@ -41,7 +41,7 @@ export default function SignupPage() {
     console.log("Signup page mounted, fetching mnemonics...");
     setIsLoading(true);
     axios
-      .get<{ mnemonics: string[] }>(`${API_BASE_URL}/api/signup-mnemonics`)
+      .get<{ mnemonics: string[] }>(`${API_BASE_URL}/api/auth/signup-mnemonics`)
       .then((res) => {
         const mnemonics = res.data.mnemonics || [];
         console.log(`Received ${mnemonics.length} mnemonics.`);
@@ -132,7 +132,7 @@ export default function SignupPage() {
         message: string;
       }
       const response = await axios.post<SignupApiResponse>(
-        `${API_BASE_URL}/api/signup`,
+        `${API_BASE_URL}/api/auth/signup`,
         signupPayload
       );
 
