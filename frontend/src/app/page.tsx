@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react"; // Removed useCallback
+import { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 import { motion } from "framer-motion";
 import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   ArrowPathIcon,
-  // LockClosedIcon, // Removed unused icon
   EyeIcon,
   EyeSlashIcon,
   KeyIcon,
@@ -17,19 +16,18 @@ import { useRouter } from "next/navigation";
 import * as bip39 from "bip39";
 import { ec as EC } from "elliptic";
 import { sha256 } from "@noble/hashes/sha2";
-import { bytesToHex } from "@noble/hashes/utils"; // Import bytesToHex directly
+import { bytesToHex } from "@noble/hashes/utils";
 import { getPublicKey } from "@noble/secp256k1";
-import Particles, { initParticlesEngine } from "@tsparticles/react"; // Correct import
+import Particles, { initParticlesEngine } from "@tsparticles/react";
 import { loadSlim } from "@tsparticles/slim";
-import type { Container, Engine } from "@tsparticles/engine"; // Import types
+import type { Container } from "@tsparticles/engine";
 import { particlesOptions } from "@/config/particlesConfig";
+import LoadingScreen from "@/components/LoadingScreen";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 const ec = new EC("secp256k1");
 
-// --- Helper Functions ---
 const hexToBytes = (hex: string): Uint8Array => {
-  // ... (function remains the same)
   if (hex.length % 2 !== 0) throw new Error("Invalid hex string length.");
   const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < hex.length; i += 2) {
@@ -38,10 +36,7 @@ const hexToBytes = (hex: string): Uint8Array => {
   return bytes;
 };
 
-// bytesToHex is imported directly from @noble/hashes/utils now
-
 const renderMessage = (msg: unknown) => {
-  // ... (function remains the same)
   if (typeof msg === "string") return msg;
   try {
     return JSON.stringify(msg);
@@ -49,10 +44,10 @@ const renderMessage = (msg: unknown) => {
     return String(msg);
   }
 };
-// --- End Helper Functions ---
 
 export default function LoginPage() {
   const [init, setInit] = useState(false);
+  const [particlesInitialized, setParticlesInitialized] = useState(false);
   const [mnemonicInput, setMnemonicInput] = useState("");
   const [isMnemonicVisible, setIsMnemonicVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -60,22 +55,58 @@ export default function LoginPage() {
   const [successMsg, setSuccessMsg] = useState("");
   const router = useRouter();
 
-  // Initialize particles engine
   useEffect(() => {
-    initParticlesEngine(async (engine: Engine) => {
-      await loadSlim(engine);
-    }).then(() => {
-      setInit(true);
-    });
+    let isMounted = true;
+    console.log("LoginPage: useEffect started");
+
+    const safetyTimeout = setTimeout(() => {
+      if (isMounted && !init) {
+        console.warn("LoginPage: Safety timeout triggered - forcing init");
+        setInit(true);
+      }
+    }, 5000);
+
+    const initialize = async () => {
+      try {
+        console.log("LoginPage: Starting particles initialization");
+        setInit(true);
+        if (!particlesInitialized) {
+          await initParticlesEngine(async (engine) => {
+            await loadSlim(engine);
+          });
+          if (isMounted) {
+            setParticlesInitialized(true);
+          }
+        }
+      } catch (err) {
+        console.error("LoginPage: Error in initialization:", err);
+      }
+    };
+
+    initialize();
+
+    return () => {
+      isMounted = false;
+      clearTimeout(safetyTimeout);
+    };
   }, []);
 
-  // Correct prop name is 'particlesLoaded', add Container type
   const particlesInit = async (container?: Container): Promise<void> => {
     console.log("Particles container loaded", container);
   };
 
+  const ParticlesBackground = useMemo(() => {
+    return (
+      <Particles
+        id="tsparticles-login"
+        particlesLoaded={particlesInit}
+        options={particlesOptions}
+        className="absolute inset-0 z-0"
+      />
+    );
+  }, []);
+
   async function handleLogin(e: React.FormEvent) {
-    // ... (logic remains the same)
     e.preventDefault();
     setIsLoading(true);
     setErrorMsg("");
@@ -95,7 +126,7 @@ export default function LoginPage() {
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : renderMessage(err));
       setIsLoading(false);
-      setMnemonicInput(""); // Clear input on error
+      setMnemonicInput("");
       return;
     }
 
@@ -116,7 +147,7 @@ export default function LoginPage() {
         : "Failed to get challenge";
       setErrorMsg(renderMessage(msg));
       setIsLoading(false);
-      setMnemonicInput(""); // Clear input on error
+      setMnemonicInput("");
       return;
     }
 
@@ -138,7 +169,7 @@ export default function LoginPage() {
       return;
     }
 
-    setMnemonicInput(""); // Clear mnemonic after successful signing
+    setMnemonicInput("");
 
     try {
       const loginRes = await axios.post(`${API_BASE_URL}/api/auth/login`, {
@@ -148,7 +179,6 @@ export default function LoginPage() {
       });
       if (loginRes.data.success) {
         setSuccessMsg(`Authentication successful! Welcome back.`);
-        // Optionally store token/session info here
         setTimeout(() => router.push("/home"), 1500);
       } else {
         setErrorMsg(renderMessage(loginRes.data.message || "Login failed."));
@@ -166,131 +196,144 @@ export default function LoginPage() {
   }
 
   if (!init) {
-    return null; // Or a loading spinner
+    return <LoadingScreen message="Initializing Secure Environment..." />;
   }
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center overflow-hidden py-12">
-      <Particles
-        id="tsparticles-signup"
-        particlesLoaded={particlesInit} // Use particlesLoaded prop
-        options={particlesOptions}
-        className="absolute inset-0 z-0"
-      />
+    <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-gray-900 via-[#0a1025] to-[#111827] p-4">
+      <div
+        className="absolute inset-0 z-0 bg-gradient-radial from-transparent via-transparent to-black opacity-70"
+        style={{
+          background:
+            "radial-gradient(circle at center, rgba(6,8,24,0) 0%, rgba(6,8,24,0.5) 70%, rgba(2,4,10,0.95) 100%)",
+        }}
+      ></div>
+      {ParticlesBackground}
+
       <motion.div
-        className="relative z-10 max-w-md w-full bg-gray-900/80 backdrop-blur-sm p-8 rounded-xl shadow-2xl border border-gray-700"
+        className="relative z-10 w-full max-w-md bg-gray-900/70 backdrop-blur-lg rounded-xl shadow-2xl border border-gray-700/50 overflow-hidden"
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
+        transition={{ duration: 0.6, ease: "easeOut" }}
       >
-        <div className="flex justify-center mb-6">
-          <KeyIcon className="h-12 w-12 text-cyan-400" />
-        </div>
-        <h2 className="text-3xl font-bold mb-2 text-center text-gray-100">
-          Secure Authentication
-        </h2>
-        <p className="text-center text-sm text-gray-400 mb-6">
-          Sign in using your recovery phrase.
-        </p>
-        <form onSubmit={handleLogin} className="space-y-6">
-          {/* Mnemonic Input Section */}
-          <div className="p-4 border border-cyan-700/50 bg-gray-800/60 rounded-lg shadow-inner">
-            <label
-              htmlFor="mnemonic"
-              className="block text-sm font-medium text-cyan-300 mb-2"
-            >
-              Enter Your 12-Word Recovery Phrase
-            </label>
-            <p className="text-xs text-gray-400 mb-3 flex items-start">
-              <ExclamationTriangleIcon className="w-4 h-4 mr-1.5 mt-0.5 flex-shrink-0 text-yellow-400" />
-              Used locally to sign the login challenge. Never sent to the
-              server.
-            </p>
-            <div className="relative">
-              <textarea
-                id="mnemonic"
-                rows={3}
-                value={mnemonicInput}
-                onChange={(e) => setMnemonicInput(e.target.value)}
-                className={`w-full p-3 border rounded-md shadow-sm focus:ring-cyan-500 focus:border-cyan-500 bg-gray-700 text-gray-100 transition placeholder-gray-500 border-gray-600 font-mono text-sm tracking-wider ${
-                  isMnemonicVisible ? "" : "blur-sm"
-                }`}
-                placeholder="Enter phrase here..."
-                spellCheck="false"
-                required
-                readOnly={isLoading}
-                style={{ filter: isMnemonicVisible ? "none" : "blur(5px)" }}
-              />
-              <button
-                type="button"
-                onClick={() => setIsMnemonicVisible(!isMnemonicVisible)}
-                className="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-cyan-300 rounded-full bg-gray-800/50 hover:bg-gray-700/70 transition"
-                aria-label={isMnemonicVisible ? "Hide phrase" : "Show phrase"}
-              >
-                {isMnemonicVisible ? (
-                  <EyeSlashIcon className="h-5 w-5" />
-                ) : (
-                  <EyeIcon className="h-5 w-5" />
-                )}
-              </button>
+        <div className="p-8 md:p-10">
+          {" "}
+          <div className="flex flex-col items-center mb-8">
+            <div className="relative mb-4">
+              <div className="absolute -inset-2 rounded-full bg-cyan-500/10 blur-lg"></div>
+              <KeyIcon className="relative h-12 w-12 text-cyan-400" />
             </div>
+            <h2 className="text-2xl font-semibold text-center text-gray-100">
+              Secure Sign In
+            </h2>
+            <p className="text-center text-sm text-gray-400 mt-2">
+              Use your recovery phrase to access your account.
+            </p>
           </div>
-
-          {/* Status Message Area */}
-          <motion.div
-            className="h-6 text-center"
-            initial={false}
-            animate={
-              errorMsg || successMsg
-                ? { opacity: 1, y: 0 }
-                : { opacity: 0, y: -10 }
-            }
-            transition={{ duration: 0.3 }}
-          >
-            {errorMsg && (
-              <p className="text-sm text-red-400 flex items-center justify-center">
-                <ExclamationTriangleIcon className="w-5 h-5 mr-1.5" />{" "}
-                {renderMessage(errorMsg)}
+          <form onSubmit={handleLogin} className="space-y-6">
+            <div>
+              <label
+                htmlFor="mnemonic"
+                className="block text-sm font-medium text-gray-300 mb-2"
+              >
+                Recovery Phrase (12 Words)
+              </label>
+              <div className="relative">
+                <textarea
+                  id="mnemonic"
+                  rows={3}
+                  value={mnemonicInput}
+                  onChange={(e) => setMnemonicInput(e.target.value)}
+                  className={`block w-full p-3 border rounded-md shadow-sm focus:ring-cyan-500 focus:border-cyan-500 bg-gray-800 text-gray-100 transition placeholder-gray-500 border-gray-600 font-mono text-sm resize-none ${
+                    isMnemonicVisible ? "" : "blur-[4px]"
+                  }`}
+                  placeholder="Enter your 12-word phrase..."
+                  spellCheck="false"
+                  required
+                  readOnly={isLoading}
+                  style={{ filter: isMnemonicVisible ? "none" : "blur(4px)" }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsMnemonicVisible(!isMnemonicVisible)}
+                  className="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-cyan-300 rounded-full bg-gray-700/50 hover:bg-gray-600/70 transition-colors duration-200"
+                  aria-label={isMnemonicVisible ? "Hide phrase" : "Show phrase"}
+                >
+                  {isMnemonicVisible ? (
+                    <EyeSlashIcon className="h-5 w-5" />
+                  ) : (
+                    <EyeIcon className="h-5 w-5" />
+                  )}
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-gray-400 flex items-start">
+                <ExclamationTriangleIcon className="w-3.5 h-3.5 mr-1.5 mt-0.5 flex-shrink-0 text-amber-400" />
+                Phrase is used locally to sign in, never sent to the server.
               </p>
-            )}
-            {successMsg && (
-              <p className="text-sm text-green-400 flex items-center justify-center">
-                <CheckCircleIcon className="w-5 h-5 mr-1.5" />{" "}
-                {renderMessage(successMsg)}
-              </p>
-            )}
-          </motion.div>
+            </div>
 
-          {/* Submit Button */}
-          <motion.button
-            type="submit"
-            disabled={isLoading || !mnemonicInput}
-            className="w-full flex justify-center items-center bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-3 px-4 border border-transparent rounded-md shadow-lg text-base font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 focus:ring-offset-gray-900 transition duration-150 ease-in-out"
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.99 }}
-          >
-            {isLoading ? (
-              // Fix: Wrap adjacent JSX elements in a fragment
-              <>
-                <ArrowPathIcon className="animate-spin h-5 w-5 mr-3" />{" "}
-                Authenticating...
-              </>
-            ) : (
-              "Sign In Securely"
-            )}
-          </motion.button>
-        </form>
+            <motion.div
+              className="h-5 text-center text-sm"
+              initial={false}
+              animate={
+                errorMsg || successMsg
+                  ? { opacity: 1, y: 0, height: "auto" }
+                  : { opacity: 0, y: -5, height: "1.25rem" }
+              }
+              transition={{ duration: 0.3 }}
+            >
+              {errorMsg && (
+                <p className="text-red-400 flex items-center justify-center">
+                  <ExclamationTriangleIcon className="w-4 h-4 mr-1.5" />
+                  {renderMessage(errorMsg)}
+                </p>
+              )}
+              {successMsg && (
+                <p className="text-green-400 flex items-center justify-center">
+                  <CheckCircleIcon className="w-4 h-4 mr-1.5" />
+                  {renderMessage(successMsg)}
+                </p>
+              )}
+            </motion.div>
 
-        {/* Link to Signup - Fix: Ensure <p> tag is correctly placed */}
-        <p className="mt-8 text-center text-sm text-gray-400">
-          Don&apos;t have an account?{" "}
-          <Link
-            href="/signup"
-            className="font-medium text-cyan-400 hover:text-cyan-300 transition duration-150 ease-in-out hover:underline"
-          >
-            Create one here
-          </Link>
-        </p>
+            <motion.button
+              type="submit"
+              disabled={isLoading || !mnemonicInput}
+              className="w-full flex justify-center items-center bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-60 disabled:cursor-not-allowed text-white py-2.5 px-4 border border-transparent rounded-md shadow-md text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 focus:ring-offset-gray-900 transition-all duration-200 ease-out"
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.99 }}
+            >
+              {isLoading ? (
+                <>
+                  <ArrowPathIcon className="animate-spin h-4 w-4 mr-2" />
+                  Authenticating...
+                </>
+              ) : (
+                "Sign In Securely"
+              )}
+            </motion.button>
+          </form>
+          <div className="mt-8 text-center">
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-700"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-gray-900/70 text-gray-500">
+                  New User?
+                </span>
+              </div>
+            </div>
+            <p className="text-sm text-gray-400">
+              <Link
+                href="/signup"
+                className="font-medium text-cyan-400 hover:text-cyan-300 hover:underline transition duration-150 ease-in-out"
+              >
+                Create an account
+              </Link>
+            </p>
+          </div>
+        </div>
       </motion.div>
     </div>
   );
