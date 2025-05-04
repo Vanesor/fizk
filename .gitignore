@@ -4,11 +4,12 @@
 Scripts/
 pyvenv.cfg
 .env
+__pycache__/
 Include/
 Lib/
 Logs/
 .lock
-CACHEDIR.TAG
+CACHEDIR.TAG 
 node_modules/
 .next
 /.pnp
