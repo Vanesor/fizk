@@ -82,6 +82,7 @@ export default function SignupPage() {
       isMounted = false;
       clearTimeout(safetyTimeout);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Functions (remain the same)
