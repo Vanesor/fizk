@@ -3,7 +3,7 @@ from sqlmodel import Session, select
 from app.db.models import User
 from app.core.exceptions import AuthError, NotFoundError, ConflictError
 from app.schemas.auth import (
-    ChallengeRequest, ChallengeResponse, LoginRequest, 
+    ChallengeRequest, ChallengeResponse, LoginRequest, SchnorrLoginRequest,
     LoginResponse, SignupRequest, SignupResponse, MnemonicResponse
 )
 from app.services.auth import AuthService
@@ -62,7 +62,7 @@ async def get_auth_challenge(req: ChallengeRequest, db: Session = Depends(get_db
     
     user = user_crud.get_by_pubkey(db, pubkey=req.pubkey)
     if not user:
-        logger.warning(f"Challenge requested for non-existent pubkey: '{req.pubkey}'")
+        logger.warning(f"Challenge requested for non-existent pubkey: '{req.pubkey[:10]}...'")
         raise NotFoundError("No account found with this identifier")
     
     challenge = AuthService.create_challenge(req.pubkey)
@@ -71,21 +71,26 @@ async def get_auth_challenge(req: ChallengeRequest, db: Session = Depends(get_db
     return ChallengeResponse(challengeHex=challenge)
 
 @router.post("/login", response_model=LoginResponse)
-async def login(req: LoginRequest, db: Session = Depends(get_db)):
+async def login(req: SchnorrLoginRequest, db: Session = Depends(get_db)):
     logger.info(f"Login attempt for pubkey: '{req.pubkey[:10]}...'")
     
     user = user_crud.get_by_pubkey(db, pubkey=req.pubkey)
     if not user:
-        logger.warning(f"Login attempt for non-existent pubkey: '{req.pubkey}'")
+        logger.warning(f"Login attempt for non-existent pubkey: '{req.pubkey[:10]}...'")
         raise NotFoundError("User not found")
     
+    logger.debug(f"Schnorr ZKP authentication for user '{user.username}':")
+    logger.debug(f"  R: {req.R_hex[:16]}...")
+    logger.debug(f"  s: {req.s_hex[:16]}...")
+    logger.debug(f"  challenge: {req.challengeHex[:16]}...")
+    
     success, error_msg = AuthService.verify_login(
-        req.pubkey, req.challengeHex, req.signature_der
+        req.pubkey, req.challengeHex, req.R_hex, req.s_hex
     )
     
     if not success:
         logger.warning(f"Login failed for '{user.username}': {error_msg}")
         raise AuthError(f"Authentication failed: {error_msg}")
     
-    logger.success(f"Login successful for user '{user.username}' (pubkey: {req.pubkey[:10]}...).")
+    logger.success(f"Login successful for user '{user.username}' (pubkey: {req.pubkey[:10]}...)")
     return LoginResponse(success=True, message="Login successful!", username=user.username)

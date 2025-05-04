@@ -58,3 +58,9 @@ class SignupResponse(BaseModel):
 
 class MnemonicResponse(BaseModel):
     mnemonics: List[str]
+
+class SchnorrLoginRequest(BaseModel):
+    pubkey: str
+    challengeHex: str
+    R_hex: str = Field(..., description="Schnorr commitment (R point)")
+    s_hex: str = Field(..., description="Schnorr response (s value)")
