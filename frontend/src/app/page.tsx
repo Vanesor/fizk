@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import axios from "axios";
 import { motion } from "framer-motion";
 import {
   CheckCircleIcon,
@@ -13,29 +12,14 @@ import {
 } from "@heroicons/react/24/solid";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import * as bip39 from "bip39";
-import { ec as EC } from "elliptic";
-import { sha256 } from "@noble/hashes/sha2";
-import { bytesToHex } from "@noble/hashes/utils";
-import { getPublicKey } from "@noble/secp256k1";
 import Particles, { initParticlesEngine } from "@tsparticles/react";
 import { loadSlim } from "@tsparticles/slim";
 import type { Container } from "@tsparticles/engine";
 import { particlesOptions } from "@/config/particlesConfig";
 import LoadingScreen from "@/components/LoadingScreen";
+import { SchnorrAuth } from "@/utils/schnorr";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-const ec = new EC("secp256k1");
-
-// Helper functions (remain the same)
-const hexToBytes = (hex: string): Uint8Array => {
-  if (hex.length % 2 !== 0) throw new Error("Invalid hex string length.");
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-  }
-  return bytes;
-};
 
 const renderMessage = (msg: unknown) => {
   if (typeof msg === "string") return msg;
@@ -45,10 +29,8 @@ const renderMessage = (msg: unknown) => {
     return String(msg);
   }
 };
-// --- End Helper Functions ---
 
 export default function LoginPage() {
-  // State and Hooks (remain the same)
   const [init, setInit] = useState(false);
   const [particlesInitialized, setParticlesInitialized] = useState(false);
   const [mnemonicInput, setMnemonicInput] = useState("");
@@ -58,7 +40,6 @@ export default function LoginPage() {
   const [successMsg, setSuccessMsg] = useState("");
   const router = useRouter();
 
-  // useEffects and other functions (remain the same)
   useEffect(() => {
     let isMounted = true;
     const safetyTimeout = setTimeout(() => {
@@ -105,79 +86,43 @@ export default function LoginPage() {
     setIsLoading(true);
     setErrorMsg("");
     setSuccessMsg("");
-    let privateKeyBytes: Uint8Array;
-    let publicKeyHex: string;
+
     try {
+      console.group("🔒 Login Process");
+      console.log("Starting Schnorr ZKP authentication...");
+
       const mnemonic = mnemonicInput.trim();
-      if (!bip39.validateMnemonic(mnemonic))
-        throw new Error("Invalid recovery phrase.");
-      const seed = await bip39.mnemonicToSeed(mnemonic);
-      privateKeyBytes = new Uint8Array(seed).slice(0, 32);
-      const pubBytes = getPublicKey(privateKeyBytes, true);
-      publicKeyHex = bytesToHex(pubBytes);
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : renderMessage(err));
-      setIsLoading(false);
-      setMnemonicInput("");
-      return;
-    }
-    let challengeHex: string;
-    try {
-      const res = await axios.post<{ challengeHex: string }>(
-        `${API_BASE_URL}/api/auth/challenge`,
-        { pubkey: publicKeyHex }
+      const { privateKey, publicKey } =
+        await SchnorrAuth.deriveKeyPairFromMnemonic(mnemonic);
+
+      const result = await SchnorrAuth.authenticate(
+        API_BASE_URL,
+        privateKey,
+        publicKey
       );
-      challengeHex = res.data.challengeHex;
-      if (!challengeHex || challengeHex.length !== 64)
-        throw new Error("Received invalid challenge from server.");
-    } catch (err: unknown) {
-      const msg = axios.isAxiosError(err)
-        ? err.response?.data?.detail || `Server Error: ${err.response?.status}`
-        : err instanceof Error
-        ? err.message
-        : "Failed to get challenge";
-      setErrorMsg(renderMessage(msg));
-      setIsLoading(false);
-      setMnemonicInput("");
-      return;
-    }
-    let signatureDER: string;
-    try {
-      const privateKeyInt = BigInt("0x" + bytesToHex(privateKeyBytes));
-      const keyPair = ec.keyFromPrivate(privateKeyInt.toString(16), "hex");
-      const challengeBytes = hexToBytes(challengeHex);
-      const challengeHash = sha256(challengeBytes);
-      const signature = keyPair.sign(challengeHash);
-      signatureDER = signature.toDER("hex");
-    } catch (err: unknown) {
-      setErrorMsg(
-        err instanceof Error
-          ? `Signing error: ${err.message}`
-          : "Failed to sign challenge"
+
+      setSuccessMsg(
+        `Welcome back, ${result.username || "user"}! Redirecting...`
       );
-      setIsLoading(false);
-      return;
-    }
-    setMnemonicInput("");
-    try {
-      const loginRes = await axios.post(`${API_BASE_URL}/api/auth/login`, {
-        pubkey: publicKeyHex,
-        signature_der: signatureDER,
-        challengeHex: challengeHex,
-      });
-      if (loginRes.data.success) {
-        setSuccessMsg(`Authentication successful! Redirecting...`);
-        setTimeout(() => router.push("/home"), 1500);
+      console.log("✅ Authentication successful! Redirecting...");
+      console.groupEnd();
+
+      setMnemonicInput("");
+
+      setTimeout(() => router.push("/home"), 1500);
+    } catch (err: unknown) {
+      console.error("❌ Authentication failed:", err);
+      console.groupEnd();
+
+      if (err instanceof Error) {
+        setErrorMsg(err.message);
       } else {
-        setErrorMsg(renderMessage(loginRes.data.message || "Login failed."));
+        setErrorMsg(
+          "Authentication failed. Please check your recovery phrase and try again."
+        );
       }
-    } catch (err: unknown) {
-      const msg = axios.isAxiosError(err)
-        ? err.response?.data?.detail || `Server Error: ${err.response?.status}`
-        : err instanceof Error
-        ? err.message
-        : "Login request failed";
-      setErrorMsg(renderMessage(msg));
+
+      setMnemonicInput("");
     } finally {
       setIsLoading(false);
     }
@@ -193,7 +138,6 @@ export default function LoginPage() {
       <div className="absolute inset-0 bg-black/40 z-0"></div>
 
       <div className="relative z-10 w-full max-w-sm flex flex-col items-center">
-        {/* Logo with increased margin */}
         <div className="mb-10 flex items-center justify-center">
           <div className="p-4 bg-blue-500/10 rounded-full">
             <KeyIcon className="h-12 w-12 text-blue-400" />
@@ -211,11 +155,7 @@ export default function LoginPage() {
           </h1>
 
           <form onSubmit={handleLogin} className="space-y-8">
-            {" "}
-            {/* Increased spacing */}
             <div className="space-y-3">
-              {" "}
-              {/* Container with spacing */}
               <label
                 htmlFor="mnemonic"
                 className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2.5"
@@ -259,10 +199,7 @@ export default function LoginPage() {
                 Enter the 12 words in the correct order.
               </p>
             </div>
-            {/* Status Messages Area */}
             <div className="h-6 text-center text-sm pt-2 pb-3">
-              {" "}
-              {/* Added padding */}
               {errorMsg && (
                 <p className="text-red-600 dark:text-red-400 flex items-center justify-center text-xs">
                   <ExclamationTriangleIcon className="w-4 h-4 mr-2 inline" />
@@ -276,7 +213,6 @@ export default function LoginPage() {
                 </p>
               )}
             </div>
-            {/* Submit Button */}
             <motion.button
               type="submit"
               disabled={isLoading || !mnemonicInput}
@@ -288,14 +224,13 @@ export default function LoginPage() {
                          text-white py-4 px-6 rounded-lg shadow-lg 
                          text-base font-medium 
                          focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-gray-800 
-                         transition-all duration-200 ease-out mt-4" /* Enhanced button */
+                         transition-all duration-200 ease-out mt-4"
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.98 }}
             >
               {isLoading ? (
                 <>
-                  <ArrowPathIcon className="animate-spin h-5 w-5 mr-2.5" />{" "}
-                  {/* Larger icon */}
+                  <ArrowPathIcon className="animate-spin h-5 w-5 mr-2.5" />
                   Signing In...
                 </>
               ) : (
@@ -305,9 +240,8 @@ export default function LoginPage() {
           </form>
         </motion.div>
 
-        {/* Sign Up Link Box */}
         <motion.div
-          className="w-full mt-8 border border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center bg-gray-50 dark:bg-gray-800/50" // Increased margin and padding
+          className="w-full mt-8 border border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center bg-gray-50 dark:bg-gray-800/50"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
