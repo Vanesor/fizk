@@ -4,9 +4,8 @@ import { bytesToHex, hexToBytes, concatBytes } from "@noble/hashes/utils";
 import * as bip39 from "bip39";
 
 export class SchnorrAuth {
-  static async deriveKeyPairFromMnemonic(mnemonic: string) {
-    console.group("🔑 Deriving Key Pair from Mnemonic");
-    console.log("Validating mnemonic...");
+  static async deriveKeyPair(mnemonic: string, password: string) {
+    console.group("🔑 Deriving Key Pair from Mnemonic + Password");
 
     try {
       if (!bip39.validateMnemonic(mnemonic)) {
@@ -15,21 +14,36 @@ export class SchnorrAuth {
         throw new Error("Invalid recovery phrase");
       }
 
-      console.log("✅ Mnemonic is valid");
-      console.log("Generating seed from mnemonic...");
-
       const seed = await bip39.mnemonicToSeed(mnemonic);
       console.log(
-        `📦 Seed generated: ${Buffer.from(seed)
+        `📦 Base seed generated: ${Buffer.from(seed)
           .toString("hex")
           .substring(0, 16)}...`
       );
 
-      const privateKey = new Uint8Array(seed).slice(0, 32);
+      const passwordHash = sha256(new TextEncoder().encode(password));
+      console.log(
+        `🔒 Password hash: ${bytesToHex(passwordHash).substring(0, 16)}...`
+      );
+
+      const tweakedSeed = new Uint8Array(seed).slice(0, 32);
+      for (let i = 0; i < 32; i++) {
+        tweakedSeed[i] = tweakedSeed[i] ^ passwordHash[i % passwordHash.length];
+      }
+      console.log(
+        `🔄 Combined seed+password: ${bytesToHex(tweakedSeed).substring(
+          0,
+          16
+        )}...`
+      );
+
+      const privateKey = tweakedSeed;
+
       const publicKey = secp.getPublicKey(privateKey, true);
       console.log(
         `🔐 Public Key: ${bytesToHex(publicKey).substring(0, 16)}...`
       );
+
       console.log("✅ Key pair derived successfully");
       console.groupEnd();
 

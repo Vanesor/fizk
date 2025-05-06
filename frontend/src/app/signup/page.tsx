@@ -17,7 +17,6 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as bip39 from "bip39";
-import { getPublicKey } from "@noble/secp256k1";
 import { sha256 } from "@noble/hashes/sha2";
 import { bytesToHex } from "@noble/hashes/utils";
 import Particles, { initParticlesEngine } from "@tsparticles/react";
@@ -25,11 +24,11 @@ import { loadSlim } from "@tsparticles/slim";
 import type { Container } from "@tsparticles/engine";
 import { particlesOptions } from "@/config/particlesConfig";
 import LoadingScreen from "@/components/LoadingScreen";
+import { SchnorrAuth } from "@/utils/schnorr";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// Helper functions (remain the same)
 const renderMessage = (msg: unknown) => {
   if (typeof msg === "string") return msg;
   try {
@@ -38,10 +37,8 @@ const renderMessage = (msg: unknown) => {
     return String(msg);
   }
 };
-// --- End Helper Functions ---
 
 export default function SignupPage() {
-  // State and Hooks (remain the same)
   const [init, setInit] = useState(false);
   const [particlesInitialized, setParticlesInitialized] = useState(false);
   const [username, setUsername] = useState("");
@@ -58,7 +55,6 @@ export default function SignupPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const router = useRouter();
 
-  // useEffects and other functions (remain the same)
   useEffect(() => {
     let isMounted = true;
     const safetyTimeout = setTimeout(() => {
@@ -85,7 +81,6 @@ export default function SignupPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Functions (remain the same)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const particlesInit = async (container?: Container): Promise<void> => {};
 
@@ -189,19 +184,23 @@ export default function SignupPage() {
     try {
       if (!bip39.validateMnemonic(selectedMnemonic))
         throw new Error("Selected recovery phrase is invalid.");
-      const seed = await bip39.mnemonicToSeed(selectedMnemonic);
-      const privateKeyBytes = new Uint8Array(seed).slice(0, 32);
-      const publicKeyBytes = getPublicKey(privateKeyBytes, true);
-      const publicKeyHex = bytesToHex(publicKeyBytes);
+
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { privateKey, publicKey } = await SchnorrAuth.deriveKeyPair(
+        selectedMnemonic,
+        password
+      );
       const passwordBytes = new TextEncoder().encode(password);
       const hashedPasswordBytes = sha256(passwordBytes);
       const hashedPassword = bytesToHex(hashedPasswordBytes);
+
       const signupPayload = {
         username,
         email,
         hashed_password: hashedPassword,
-        pubkey: publicKeyHex,
+        pubkey: publicKey,
       };
+
       const response = await axios.post<{ success: boolean; message: string }>(
         `${API_BASE_URL}/api/auth/signup`,
         signupPayload
@@ -230,7 +229,6 @@ export default function SignupPage() {
       setIsLoading(false);
     }
   }
-  // --- End Functions ---
 
   if (!init) {
     return <LoadingScreen message="Preparing Signup..." />;
@@ -279,7 +277,6 @@ export default function SignupPage() {
       <div className="absolute inset-0 bg-black/40 z-0"></div>
 
       <div className="relative z-10 w-full max-w-lg flex flex-col items-center">
-        {/* Icon with enhanced presentation */}
         <div className="mb-10 flex items-center justify-center">
           <div className="p-4 bg-blue-500/10 rounded-full">
             <UserPlusIcon className="h-12 w-12 text-blue-400" />
@@ -292,14 +289,11 @@ export default function SignupPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
         >
-          {/* Header within the card */}
           <div className="p-8 md:p-10 border-b border-gray-200 dark:border-gray-700">
             <h1 className="text-2xl font-semibold text-center text-gray-900 dark:text-white mb-8">
               Create your account
             </h1>
             <div className="flex items-center justify-center space-x-8">
-              {" "}
-              {/* Increased spacing */}
               {stepIndicator(1, "Recovery Phrase", LockClosedIcon)}
               <div className="w-12 h-0.5 bg-gray-300 dark:bg-gray-600 relative">
                 <div
@@ -312,10 +306,8 @@ export default function SignupPage() {
             </div>
           </div>
 
-          {/* Form Content Area */}
           <div className="p-8 md:p-10">
             <AnimatePresence mode="wait">
-              {/* Step 1: Recovery Phrase */}
               {currentStep === 1 && (
                 <motion.div
                   key="step1"
@@ -326,13 +318,8 @@ export default function SignupPage() {
                   className="space-y-8" // Increased spacing
                 >
                   <div className="flex items-start p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-700/30">
-                    {" "}
-                    {/* Enhanced warning box */}
                     <ExclamationTriangleIcon className="w-6 h-6 mt-0.5 mr-3.5 flex-shrink-0 text-yellow-600 dark:text-yellow-400" />{" "}
-                    {/* Larger icon, more margin */}
                     <div className="space-y-1.5">
-                      {" "}
-                      {/* Added container with spacing */}
                       <p className="font-semibold text-sm text-yellow-800 dark:text-yellow-300">
                         Important Security Information
                       </p>
@@ -347,22 +334,15 @@ export default function SignupPage() {
 
                   {isFetchingMnemonics ? (
                     <div className="flex flex-col items-center justify-center h-40 text-gray-500 dark:text-gray-400">
-                      {" "}
-                      {/* Increased height, added flex-col */}
                       <ArrowPathIcon className="animate-spin h-6 w-6 mb-3" />{" "}
-                      {/* Larger icon with margin */}
                       <p>Loading recovery phrases...</p>
                     </div>
                   ) : generatedMnemonics.length > 0 ? (
                     <fieldset className="space-y-4">
-                      {" "}
-                      {/* Increased spacing */}
                       <legend className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 px-1">
                         Select your recovery phrase:
                       </legend>
                       <div className="space-y-4">
-                        {" "}
-                        {/* Container with spacing */}
                         {generatedMnemonics.map((mnemonic, index) => (
                           <label
                             key={index}
@@ -396,9 +376,9 @@ export default function SignupPage() {
                               aria-label="Copy phrase"
                             >
                               {copiedIndex === index ? (
-                                <CheckCircleIcon className="h-5 w-5 text-green-500" /> // Larger icon
+                                <CheckCircleIcon className="h-5 w-5 text-green-500" />
                               ) : (
-                                <ClipboardDocumentIcon className="h-5 w-5" /> // Larger icon
+                                <ClipboardDocumentIcon className="h-5 w-5" />
                               )}
                             </button>
                           </label>
@@ -411,8 +391,6 @@ export default function SignupPage() {
                       Failed to load phrases. Please refresh.
                     </div>
                   )}
-
-                  {/* Error Message with better spacing */}
                   {errorMsg && currentStep === 1 && (
                     <div className="px-1 pt-2">
                       <p className="text-red-600 dark:text-red-400 text-xs text-center flex items-center justify-center">
@@ -421,8 +399,6 @@ export default function SignupPage() {
                       </p>
                     </div>
                   )}
-
-                  {/* Next button with enhanced style */}
                   <motion.button
                     type="button"
                     disabled={!selectedMnemonic || isFetchingMnemonics}
@@ -441,12 +417,9 @@ export default function SignupPage() {
                   >
                     Continue to Account Details{" "}
                     <ChevronRightIcon className="h-5 w-5 ml-1.5" />{" "}
-                    {/* Larger icon */}
                   </motion.button>
                 </motion.div>
               )}
-
-              {/* Step 2: Account Details */}
               {currentStep === 2 && (
                 <motion.form
                   key="step2"
@@ -455,14 +428,10 @@ export default function SignupPage() {
                   exit={{ opacity: 0, x: -15 }}
                   transition={{ duration: 0.25, ease: "easeInOut" }}
                   onSubmit={handleSignup}
-                  className="space-y-6" // Increased spacing
+                  className="space-y-6"
                 >
                   <div className="space-y-6">
-                    {" "}
-                    {/* Container with spacing */}
                     <div className="space-y-1.5">
-                      {" "}
-                      {/* Field container with spacing */}
                       <label
                         htmlFor="username"
                         className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
@@ -486,8 +455,6 @@ export default function SignupPage() {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      {" "}
-                      {/* Field container with spacing */}
                       <label
                         htmlFor="email"
                         className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
@@ -510,8 +477,6 @@ export default function SignupPage() {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      {" "}
-                      {/* Field container with spacing */}
                       <label
                         htmlFor="password"
                         className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
@@ -546,17 +511,12 @@ export default function SignupPage() {
                             <EyeSlashIcon className="h-5 w-5" />
                           ) : (
                             <EyeIcon className="h-5 w-5" />
-                          )}{" "}
-                          {/* Larger icons */}
+                          )}
                         </button>
                       </div>
                     </div>
                   </div>
-
-                  {/* Status Messages Area */}
                   <div className="h-6 text-center text-sm py-2">
-                    {" "}
-                    {/* Added padding */}
                     {errorMsg && currentStep === 2 && (
                       <p className="text-red-600 dark:text-red-400 flex items-center justify-center text-xs">
                         <ExclamationTriangleIcon className="w-4 h-4 mr-2 inline" />
@@ -570,11 +530,7 @@ export default function SignupPage() {
                       </p>
                     )}
                   </div>
-
-                  {/* Button Group with better spacing and differentiated buttons */}
                   <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-5 pt-4">
-                    {" "}
-                    {/* Increased spacing */}
                     <motion.button
                       type="button"
                       onClick={handlePrevStep}
@@ -585,7 +541,7 @@ export default function SignupPage() {
                                 py-4 px-5 rounded-lg shadow-sm 
                                 text-base font-medium 
                                 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 dark:focus:ring-offset-gray-800 
-                                transition-colors duration-200" // Transparent background, distinct style
+                                transition-colors duration-200"
                       whileHover={{ scale: 1.01 }}
                       whileTap={{ scale: 0.98 }}
                     >
@@ -602,14 +558,13 @@ export default function SignupPage() {
                                 text-white py-4 px-5 rounded-lg shadow-lg
                                 text-base font-medium 
                                 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-gray-800 
-                                transition-all duration-200 ease-out" // Enhanced primary button
+                                transition-all duration-200 ease-out"
                       whileHover={{ scale: 1.01 }}
                       whileTap={{ scale: 0.98 }}
                     >
                       {isLoading ? (
                         <>
                           <ArrowPathIcon className="animate-spin h-5 w-5 mr-2.5" />{" "}
-                          {/* Larger icon with margin */}
                           Creating Account...
                         </>
                       ) : (
@@ -622,8 +577,6 @@ export default function SignupPage() {
             </AnimatePresence>
           </div>
         </motion.div>
-
-        {/* Sign In Link Box */}
         <motion.div
           className="w-full mt-8 text-center bg-white/5 backdrop-blur-sm rounded-lg p-6 border border-gray-300/20 dark:border-gray-600/20" // Enhanced styling
           initial={{ opacity: 0, y: 10 }}

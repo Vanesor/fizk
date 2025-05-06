@@ -48,7 +48,7 @@ export default function HomePage() {
     setIsAuthenticated(authStatus);
     if (!authStatus) {
       log.warn("User not authenticated, redirecting to login.");
-      router.replace("/"); // Redirect to login page ('/')
+      router.replace("/");
     } else {
       log.info("User authenticated.");
     }
@@ -100,7 +100,7 @@ export default function HomePage() {
             <div>
               <button onClick={handleLogout} className="...">
                 {" "}
-                <ArrowLeftOnRectangleIcon className="h-5 w-5 mr-2" /> Logout{" "}
+                <ArrowLeftOnRectangleIcon className="h-5 w-5 mr-2" /> Logout
               </button>
             </div>
           </div>
