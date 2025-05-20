@@ -11,8 +11,8 @@ import {
   EyeSlashIcon,
   UserPlusIcon,
   ClipboardDocumentIcon,
-  ChevronRightIcon,
   LockClosedIcon,
+  ChevronRightIcon,
 } from "@heroicons/react/24/solid";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -25,6 +25,13 @@ import type { Container } from "@tsparticles/engine";
 import { particlesOptions } from "@/config/particlesConfig";
 import LoadingScreen from "@/components/LoadingScreen";
 import { SchnorrAuth } from "@/utils/schnorr";
+import {
+  SeedInput,
+  SeedValidator,
+  SeedTypeToggle,
+  CustomSeedInfoBox,
+} from "@/components/SeedPhraseTools";
+import { validateSeed, formatSeed } from "@/utils/seedUtils";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -53,6 +60,9 @@ export default function SignupPage() {
   const [successMsg, setSuccessMsg] = useState("");
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
+  const [seedInput, setSeedInput] = useState("");
+  const [isSeedVisible, setIsSeedVisible] = useState(false);
+  const [seedType, setSeedType] = useState<"provided" | "custom">("provided");
   const router = useRouter();
 
   useEffect(() => {
@@ -123,9 +133,17 @@ export default function SignupPage() {
   const validateCurrentStep = (): boolean => {
     setErrorMsg("");
     if (currentStep === 1) {
-      if (!selectedMnemonic) {
+      if (seedType === "provided" && !selectedMnemonic) {
         setErrorMsg("Please select a recovery phrase.");
         return false;
+      }
+
+      if (seedType === "custom") {
+        const { isValidHex } = validateSeed(seedInput);
+        if (!isValidHex) {
+          setErrorMsg("Please enter a valid 64-character hex seed.");
+          return false;
+        }
       }
     } else if (currentStep === 2) {
       if (!username.trim() || username.length < 3) {
@@ -155,10 +173,20 @@ export default function SignupPage() {
 
   const validateForm = (): boolean => {
     setErrorMsg("");
-    if (!selectedMnemonic) {
-      setErrorMsg("Recovery phrase not selected.");
-      return false;
+
+    if (seedType === "provided") {
+      if (!selectedMnemonic) {
+        setErrorMsg("Recovery phrase not selected.");
+        return false;
+      }
+    } else {
+      const { isValidHex } = validateSeed(seedInput);
+      if (!isValidHex) {
+        setErrorMsg("Please enter a valid 64-character hex seed.");
+        return false;
+      }
     }
+
     if (!username.trim() || username.length < 3) {
       setErrorMsg("Username must be at least 3 characters.");
       return false;
@@ -182,12 +210,16 @@ export default function SignupPage() {
     setSuccessMsg("");
 
     try {
-      if (!bip39.validateMnemonic(selectedMnemonic))
+      const seedToUse =
+        seedType === "provided" ? selectedMnemonic : formatSeed(seedInput);
+
+      if (seedType === "provided" && !bip39.validateMnemonic(seedToUse)) {
         throw new Error("Selected recovery phrase is invalid.");
+      }
 
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { privateKey, publicKey } = await SchnorrAuth.deriveKeyPair(
-        selectedMnemonic,
+        seedToUse,
         password
       );
       const passwordBytes = new TextEncoder().encode(password);
@@ -315,7 +347,7 @@ export default function SignupPage() {
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 15 }}
                   transition={{ duration: 0.25, ease: "easeInOut" }}
-                  className="space-y-8" // Increased spacing
+                  className="space-y-8"
                 >
                   <div className="flex items-start p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-700/30">
                     <ExclamationTriangleIcon className="w-6 h-6 mt-0.5 mr-3.5 flex-shrink-0 text-yellow-600 dark:text-yellow-400" />{" "}
@@ -324,100 +356,121 @@ export default function SignupPage() {
                         Important Security Information
                       </p>
                       <p className="text-xs text-yellow-700 dark:text-yellow-200 leading-relaxed">
-                        Write down this 12-word phrase and store it securely
-                        offline. This is the{" "}
-                        <span className="font-semibold">ONLY</span> way to
-                        recover your account. Never share it.
+                        {seedType === "provided"
+                          ? "Write down this 12-word phrase and store it securely offline. This is the ONLY way to recover your account. Never share it."
+                          : "Keep your custom seed secure and backed up. This is the ONLY way to recover your account."}
                       </p>
                     </div>
                   </div>
 
-                  {isFetchingMnemonics ? (
-                    <div className="flex flex-col items-center justify-center h-40 text-gray-500 dark:text-gray-400">
-                      <ArrowPathIcon className="animate-spin h-6 w-6 mb-3" />{" "}
-                      <p>Loading recovery phrases...</p>
-                    </div>
-                  ) : generatedMnemonics.length > 0 ? (
-                    <fieldset className="space-y-4">
-                      <legend className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 px-1">
-                        Select your recovery phrase:
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <legend className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Recovery Method:
                       </legend>
+                    </div>
+
+                    <SeedTypeToggle
+                      seedType={seedType === "provided" ? "mnemonic" : "custom"}
+                      setSeedType={(type) =>
+                        setSeedType(type === "mnemonic" ? "provided" : "custom")
+                      }
+                    />
+
+                    {seedType === "provided" ? (
+                      <fieldset className="space-y-4">
+                        <legend className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 px-1">
+                          Select your recovery phrase:
+                        </legend>
+
+                        {isFetchingMnemonics ? (
+                          <div className="flex flex-col items-center justify-center h-40 text-gray-500 dark:text-gray-400">
+                            <ArrowPathIcon className="animate-spin h-6 w-6 mb-3" />
+                            <p>Loading recovery phrases...</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {generatedMnemonics.map((mnemonic, index) => (
+                              <label
+                                key={index}
+                                htmlFor={`mnemonic-${index}`}
+                                className={`relative flex items-center p-4 border rounded-lg cursor-pointer transition-all duration-200 
+                                           ${
+                                             selectedMnemonic === mnemonic
+                                               ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30 ring-2 ring-blue-500/40 shadow-md"
+                                               : "border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/30 hover:border-gray-400 dark:hover:border-gray-500 hover:shadow-sm"
+                                           }`}
+                              >
+                                <input
+                                  type="radio"
+                                  id={`mnemonic-${index}`}
+                                  name="mnemonicChoice"
+                                  value={mnemonic}
+                                  checked={selectedMnemonic === mnemonic}
+                                  onChange={() => setSelectedMnemonic(mnemonic)}
+                                  className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500 mr-4"
+                                />
+                                <span className="text-sm font-mono text-gray-800 dark:text-gray-200 tracking-wide leading-relaxed break-words flex-grow">
+                                  {mnemonic}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handleCopyToClipboard(mnemonic, index);
+                                  }}
+                                  className="ml-4 flex-shrink-0 p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-md bg-gray-200/70 dark:bg-gray-600/70 hover:bg-gray-300/80 dark:hover:bg-gray-500/80 transition-colors duration-150"
+                                  aria-label="Copy phrase"
+                                >
+                                  {copiedIndex === index ? (
+                                    <CheckCircleIcon className="h-5 w-5 text-green-500" />
+                                  ) : (
+                                    <ClipboardDocumentIcon className="h-5 w-5" />
+                                  )}
+                                </button>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </fieldset>
+                    ) : (
                       <div className="space-y-4">
-                        {generatedMnemonics.map((mnemonic, index) => (
-                          <label
-                            key={index}
-                            htmlFor={`mnemonic-${index}`}
-                            className={`relative flex items-center p-4 border rounded-lg cursor-pointer transition-all duration-200 
-                                       ${
-                                         selectedMnemonic === mnemonic
-                                           ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30 ring-2 ring-blue-500/40 shadow-md" // Enhanced selected state
-                                           : "border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/30 hover:border-gray-400 dark:hover:border-gray-500 hover:shadow-sm" // Enhanced hover
-                                       }`}
-                          >
-                            <input
-                              type="radio"
-                              id={`mnemonic-${index}`}
-                              name="mnemonicChoice"
-                              value={mnemonic}
-                              checked={selectedMnemonic === mnemonic}
-                              onChange={() => setSelectedMnemonic(mnemonic)}
-                              className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500 mr-4" // Increased margin
-                            />
-                            <span className="text-sm font-mono text-gray-800 dark:text-gray-200 tracking-wide leading-relaxed break-words flex-grow">
-                              {mnemonic}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                handleCopyToClipboard(mnemonic, index);
-                              }}
-                              className="ml-4 flex-shrink-0 p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-md bg-gray-200/70 dark:bg-gray-600/70 hover:bg-gray-300/80 dark:hover:bg-gray-500/80 transition-colors duration-150"
-                              aria-label="Copy phrase"
-                            >
-                              {copiedIndex === index ? (
-                                <CheckCircleIcon className="h-5 w-5 text-green-500" />
-                              ) : (
-                                <ClipboardDocumentIcon className="h-5 w-5" />
-                              )}
-                            </button>
+                        <CustomSeedInfoBox />
+
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Enter your custom seed:
                           </label>
-                        ))}
+
+                          <SeedInput
+                            seed={seedInput}
+                            setSeed={setSeedInput}
+                            isSeedVisible={isSeedVisible}
+                            setIsSeedVisible={setIsSeedVisible}
+                          />
+
+                          {seedInput.trim() && (
+                            <div className="mt-2">
+                              <SeedValidator seed={seedInput} />
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </fieldset>
-                  ) : (
-                    <div className="flex items-center justify-center p-6 bg-red-50 dark:bg-red-900/10 text-sm text-center text-red-600 dark:text-red-400 rounded-lg border border-red-200 dark:border-red-800/30">
-                      <ExclamationTriangleIcon className="h-5 w-5 mr-2.5" />
-                      Failed to load phrases. Please refresh.
-                    </div>
-                  )}
-                  {errorMsg && currentStep === 1 && (
-                    <div className="px-1 pt-2">
-                      <p className="text-red-600 dark:text-red-400 text-xs text-center flex items-center justify-center">
-                        <ExclamationTriangleIcon className="w-4 h-4 mr-1.5 inline" />
-                        {renderMessage(errorMsg)}
-                      </p>
-                    </div>
-                  )}
-                  <motion.button
-                    type="button"
-                    disabled={!selectedMnemonic || isFetchingMnemonics}
-                    onClick={handleNextStep}
-                    className="w-full flex justify-center items-center 
-                               bg-gradient-to-r from-blue-600 to-blue-500
-                               hover:from-blue-500 hover:to-blue-400 
-                               disabled:from-blue-400 disabled:to-blue-300 dark:disabled:from-blue-800 dark:disabled:to-blue-700
-                               disabled:opacity-70 disabled:cursor-not-allowed 
-                               text-white py-4 px-6 rounded-lg shadow-lg 
-                               text-base font-medium 
-                               focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-gray-800 
-                               transition-all duration-200 ease-out mt-6"
-                    whileHover={{ scale: 1.01 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    Continue to Account Details{" "}
-                    <ChevronRightIcon className="h-5 w-5 ml-1.5" />{" "}
-                  </motion.button>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end mt-6">
+                    <motion.button
+                      type="button"
+                      onClick={handleNextStep}
+                      className="flex items-center justify-center py-2.5 px-5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow-md transition-colors"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      Continue
+                      <ChevronRightIcon className="h-4 w-4 ml-2" />
+                    </motion.button>
+                  </div>
                 </motion.div>
               )}
               {currentStep === 2 && (
@@ -450,7 +503,7 @@ export default function SignupPage() {
                                   placeholder-gray-400 dark:placeholder-gray-500 
                                   border-gray-300 dark:border-gray-600 text-sm transition-all duration-200
                                   hover:border-gray-400 dark:hover:border-gray-500
-                                  focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 focus:ring-opacity-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/20" // Enhanced focus
+                                  focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 focus:ring-opacity-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/20"
                         placeholder="Choose a username"
                       />
                     </div>
@@ -472,7 +525,7 @@ export default function SignupPage() {
                                   placeholder-gray-400 dark:placeholder-gray-500 
                                   border-gray-300 dark:border-gray-600 text-sm transition-all duration-200
                                   hover:border-gray-400 dark:hover:border-gray-500
-                                  focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 focus:ring-opacity-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/20" // Enhanced focus
+                                  focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 focus:ring-opacity-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/20"
                         placeholder="your@email.com"
                       />
                     </div>
@@ -496,7 +549,7 @@ export default function SignupPage() {
                                     placeholder-gray-400 dark:placeholder-gray-500 
                                     border-gray-300 dark:border-gray-600 text-sm pr-12 transition-all duration-200
                                     hover:border-gray-400 dark:hover:border-gray-500
-                                    focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 focus:ring-opacity-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/20" // Enhanced focus, increased padding-right
+                                    focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 focus:ring-opacity-50 dark:focus:border-blue-400 dark:focus:ring-blue-400/20"
                           placeholder="Create a strong password (min. 8 characters)"
                         />
                         <button
@@ -578,7 +631,7 @@ export default function SignupPage() {
           </div>
         </motion.div>
         <motion.div
-          className="w-full mt-8 text-center bg-white/5 backdrop-blur-sm rounded-lg p-6 border border-gray-300/20 dark:border-gray-600/20" // Enhanced styling
+          className="w-full mt-8 text-center bg-white/5 backdrop-blur-sm rounded-lg p-6 border border-gray-300/20 dark:border-gray-600/20"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}

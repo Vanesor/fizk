@@ -20,6 +20,13 @@ import type { Container } from "@tsparticles/engine";
 import { particlesOptions } from "@/config/particlesConfig";
 import LoadingScreen from "@/components/LoadingScreen";
 import { SchnorrAuth } from "@/utils/schnorr";
+import {
+  SeedInput,
+  SeedValidator,
+  SeedTypeToggle,
+  CustomSeedInfoBox,
+} from "@/components/SeedPhraseTools";
+import { validateSeed, formatSeed } from "@/utils/seedUtils";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
@@ -37,11 +44,12 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export default function LoginPage() {
   const [init, setInit] = useState(false);
   const [particlesInitialized, setParticlesInitialized] = useState(false);
-  const [identifier, setIdentifier] = useState(""); // Username or email
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-  const [mnemonicInput, setMnemonicInput] = useState("");
-  const [isMnemonicVisible, setIsMnemonicVisible] = useState(false);
+  const [seedInput, setSeedInput] = useState("");
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [isSeedVisible, setIsSeedVisible] = useState(false);
+  const [seedType, setSeedType] = useState<"mnemonic" | "custom">("mnemonic");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
@@ -89,18 +97,28 @@ export default function LoginPage() {
   );
 
   const isFormValid = () => {
-    return (
-      identifier.trim() !== "" &&
-      password.trim() !== "" &&
-      mnemonicInput.trim() !== ""
-    );
+    if (
+      identifier.trim() === "" ||
+      password.trim() === "" ||
+      seedInput.trim() === ""
+    ) {
+      return false;
+    }
+
+    const { isValidMnemonic, isValidHex } = validateSeed(seedInput);
+
+    if (seedType === "mnemonic") {
+      return isValidMnemonic;
+    } else {
+      return isValidHex;
+    }
   };
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
 
     if (!isFormValid()) {
-      setErrorMsg("Please fill in all fields");
+      setErrorMsg("Please fill in all fields with valid information");
       return;
     }
 
@@ -144,15 +162,17 @@ export default function LoginPage() {
         `✅ Identifier resolved to public key: ${pubkey.substring(0, 16)}...`
       );
 
-      console.log("🔑 Deriving key pair from mnemonic + password...");
+      const formattedSeed = formatSeed(seedInput);
+
+      console.log("🔑 Deriving key pair from seed + password...");
       const { privateKey, publicKey } = await SchnorrAuth.deriveKeyPair(
-        mnemonicInput.trim(),
+        formattedSeed,
         password
       );
 
       if (publicKey !== pubkey) {
         console.error("❌ Derived public key doesn't match stored key");
-        throw new Error("Invalid mnemonic or password combination");
+        throw new Error("Invalid seed or password combination");
       }
 
       const result = await SchnorrAuth.authenticate(
@@ -171,7 +191,7 @@ export default function LoginPage() {
         localStorage.setItem("authToken", result.token);
       }
 
-      setMnemonicInput("");
+      setSeedInput("");
       setPassword("");
       setIdentifier("");
 
@@ -283,44 +303,37 @@ export default function LoginPage() {
 
             <div>
               <label
-                htmlFor="mnemonic"
+                htmlFor="seed"
                 className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
               >
-                Recovery Phrase
+                Recovery Method
               </label>
-              <div className="relative mt-1">
-                <textarea
-                  id="mnemonic"
-                  value={mnemonicInput}
-                  onChange={(e) => setMnemonicInput(e.target.value)}
-                  rows={3}
-                  className={`block w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 
-                           bg-gray-100 dark:bg-gray-700 
-                           text-gray-900 dark:text-gray-100 
-                           font-mono text-sm resize-none
-                           ${isMnemonicVisible ? "" : "filter blur-sm"}`}
-                  placeholder="Enter your 12-word recovery phrase..."
-                  spellCheck="false"
-                  required
+
+              <SeedTypeToggle seedType={seedType} setSeedType={setSeedType} />
+
+              {seedType === "custom" && <CustomSeedInfoBox />}
+
+              <div className="mt-3">
+                <SeedInput
+                  seed={seedInput}
+                  setSeed={setSeedInput}
+                  isSeedVisible={isSeedVisible}
+                  setIsSeedVisible={setIsSeedVisible}
                   readOnly={isLoading}
                 />
-                <button
-                  type="button"
-                  onClick={() => setIsMnemonicVisible(!isMnemonicVisible)}
-                  className="absolute bottom-2 right-2 p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-md bg-gray-200/50 dark:bg-gray-600/50 hover:bg-gray-300/70 dark:hover:bg-gray-500/70 transition-colors duration-150"
-                  aria-label={isMnemonicVisible ? "Hide phrase" : "Show phrase"}
-                >
-                  {isMnemonicVisible ? (
-                    <EyeSlashIcon className="h-5 w-5" />
-                  ) : (
-                    <EyeIcon className="h-5 w-5" />
-                  )}
-                </button>
               </div>
+
               <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                Enter your 12-word mnemonic phrase in the correct order,
-                separated by spaces.
+                {seedType === "mnemonic"
+                  ? "Enter your 12-word recovery phrase, separated by spaces."
+                  : "Enter your 64-character hex seed generated with our tool."}
               </p>
+
+              {seedInput.trim() && (
+                <div className="mt-2">
+                  <SeedValidator seed={seedInput.trim()} />
+                </div>
+              )}
             </div>
 
             <div className="h-6 text-center text-sm">
