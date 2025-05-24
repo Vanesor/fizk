@@ -111,28 +111,33 @@ export const SeedTypeToggle: React.FC<SeedTypeToggleProps> = ({
   setSeedType,
 }) => {
   return (
-    <div className="flex flex-wrap gap-2 mb-4">
+    <div className="flex flex-col sm:flex-row gap-4 my-5 p-4 bg-gray-100/80 dark:bg-gray-700/40 rounded-xl">
       <button
         type="button"
         onClick={() => setSeedType("mnemonic")}
-        className={`px-3 py-2 text-sm rounded-lg transition-colors ${
+        className={`flex-1 py-3.5 px-5 text-sm font-medium rounded-lg transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 ${
           seedType === "mnemonic"
-            ? "bg-blue-100 text-blue-800 border border-blue-300 dark:bg-blue-900/50 dark:text-blue-300 dark:border-blue-700"
-            : "bg-gray-100 text-gray-700 border border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
+            ? "bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg border-2 border-blue-400 dark:border-blue-400 transform scale-100"
+            : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
         }`}
       >
+        {seedType === "mnemonic" && (
+          <span className="absolute inset-0 bg-blue-500/10 dark:bg-blue-400/10 rounded-lg"></span>
+        )}
         Use Recovery Phrase
       </button>
-
       <button
         type="button"
         onClick={() => setSeedType("custom")}
-        className={`px-3 py-2 text-sm rounded-lg transition-colors ${
+        className={`flex-1 py-3.5 px-5 text-sm font-medium rounded-lg transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 ${
           seedType === "custom"
-            ? "bg-blue-100 text-blue-800 border border-blue-300 dark:bg-blue-900/50 dark:text-blue-300 dark:border-blue-700"
-            : "bg-gray-100 text-gray-700 border border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
+            ? "bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg border-2 border-blue-400 dark:border-blue-400 transform scale-100"
+            : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
         }`}
       >
+        {seedType === "custom" && (
+          <span className="absolute inset-0 bg-blue-500/10 dark:bg-blue-400/10 rounded-lg"></span>
+        )}
         Use Custom Seed
       </button>
     </div>
