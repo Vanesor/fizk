@@ -2,6 +2,9 @@
 
 # dependencies
 Scripts/
+dist/
+build/
+.spec
 pyvenv.cfg
 .env
 __pycache__/
@@ -49,3 +52,4 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+frontend/src/FiZk-Seed-Generator.spec
