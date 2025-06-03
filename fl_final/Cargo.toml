@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "zkp_fl_project/zkp_toolkit"
+]
+resolver = "2"

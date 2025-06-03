@@ -1,1 +1,0 @@
-"""ZKP Auth API Application."""
