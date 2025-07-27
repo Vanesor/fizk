@@ -1,10 +1,11 @@
+from typing import Dict
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 from app.db.models import User
 from app.core.exceptions import AuthError, NotFoundError, ConflictError
 from app.schemas.auth import (
     ChallengeRequest, ChallengeResponse, LoginRequest, SchnorrLoginRequest,
-    LoginResponse, SignupRequest, SignupResponse, MnemonicResponse
+    LoginResponse, SignupRequest, SignupResponse, MnemonicResponse, ResolveUserRequest
 )
 from app.services.auth import AuthService
 from app.api.dependencies import get_db, get_mnemonic_generator
@@ -94,3 +95,25 @@ async def login(req: SchnorrLoginRequest, db: Session = Depends(get_db)):
     
     logger.success(f"Login successful for user '{user.username}' (pubkey: {req.pubkey[:10]}...)")
     return LoginResponse(success=True, message="Login successful!", username=user.username)
+
+@router.post("/resolve-user", response_model=Dict[str, str])
+async def resolve_user(request: ResolveUserRequest, db: Session = Depends(get_db)):
+    identifier = request.identifier
+    is_email = request.is_email
+    
+    logger.info(f"Resolving {'email' if is_email else 'username'}: {identifier}")
+    
+    if is_email:
+        user = user_crud.get_by_email(db, email=identifier)
+    else:
+        user = user_crud.get_by_username(db, username=identifier)
+    
+    if not user:
+        logger.warning(f"User not found for identifier: {identifier}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
+        )
+    
+    logger.info(f"Resolved identifier {identifier} to pubkey: {user.pubkey[:10]}...")
+    return {"pubkey": user.pubkey}

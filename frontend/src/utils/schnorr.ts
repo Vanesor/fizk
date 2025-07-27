@@ -1,35 +1,72 @@
 import * as secp from "@noble/secp256k1";
 import { sha256 } from "@noble/hashes/sha2";
 import { bytesToHex, hexToBytes, concatBytes } from "@noble/hashes/utils";
-import * as bip39 from "bip39";
+import { pbkdf2 } from "pbkdf2";
 
 export class SchnorrAuth {
-  static async deriveKeyPairFromMnemonic(mnemonic: string) {
-    console.group("🔑 Deriving Key Pair from Mnemonic");
-    console.log("Validating mnemonic...");
+  static async deriveKeyPair(seedInput: string, password: string) {
+    console.group("🔑 Deriving Key Pair from Seed + Password");
 
     try {
-      if (!bip39.validateMnemonic(mnemonic)) {
-        console.error("❌ Invalid mnemonic phrase");
-        console.groupEnd();
-        throw new Error("Invalid recovery phrase");
+      const isHexSeed = /^[0-9a-fA-F]{64}$/.test(seedInput.trim());
+
+      let seed: Uint8Array;
+      if (isHexSeed) {
+        console.log("📊 Using direct hex seed format");
+        const hexSeed = seedInput.trim();
+        seed = new Uint8Array(
+          hexSeed.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16))
+        );
+      } else {
+        console.log("📝 Using BIP39 mnemonic format");
+        const passwordBytes = new TextEncoder().encode(`mnemonic${password}`);
+        seed = await new Promise<Uint8Array>((resolve, reject) => {
+          pbkdf2(
+            new TextEncoder().encode(seedInput),
+            passwordBytes,
+            2048,
+            64,
+            "SHA-512",
+            (err, derivedKey) => {
+              if (err) reject(err);
+              else resolve(new Uint8Array(derivedKey));
+            }
+          );
+        });
+      }
+      if (!seed) {
+        throw new Error("Failed to derive seed");
       }
 
-      console.log("✅ Mnemonic is valid");
-      console.log("Generating seed from mnemonic...");
-
-      const seed = await bip39.mnemonicToSeed(mnemonic);
       console.log(
-        `📦 Seed generated: ${Buffer.from(seed)
+        `📦 Base seed generated: ${Buffer.from(seed)
           .toString("hex")
           .substring(0, 16)}...`
       );
 
-      const privateKey = new Uint8Array(seed).slice(0, 32);
+      const passwordHash = sha256(new TextEncoder().encode(password));
+      console.log(
+        `🔒 Password hash: ${bytesToHex(passwordHash).substring(0, 16)}...`
+      );
+
+      const tweakedSeed = new Uint8Array(seed).slice(0, 32);
+      for (let i = 0; i < 32; i++) {
+        tweakedSeed[i] = tweakedSeed[i] ^ passwordHash[i % passwordHash.length];
+      }
+      console.log(
+        `🔄 Combined seed+password: ${bytesToHex(tweakedSeed).substring(
+          0,
+          16
+        )}...`
+      );
+
+      const privateKey = tweakedSeed;
+
       const publicKey = secp.getPublicKey(privateKey, true);
       console.log(
         `🔐 Public Key: ${bytesToHex(publicKey).substring(0, 16)}...`
       );
+
       console.log("✅ Key pair derived successfully");
       console.groupEnd();
 

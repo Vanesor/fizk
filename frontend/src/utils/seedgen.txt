@@ -1,0 +1,53 @@
+FiZk Advanced Seed Generator
+===========================
+
+This utility lets you create a secure 64-character hex seed from ANY input words.
+Unlike standard BIP39, you can use any words, phrases, or text you want!
+
+FEATURES:
+
+* Use any number of words - not just 12/24
+* Words don't need to be from a specific wordlist
+* Three different generation methods for different security profiles
+* Works with completely random words
+* Creates a seed compatible with FiZk's direct seed entry
+* Detailed mode to see the processing steps
+
+USAGE EXAMPLES:
+
+1. Basic usage with your own words:
+   python seedgen.py --words "any words you want to use no specific format required"
+
+2. Using the Personal Mixer method (good for memorability):
+   python seedgen.py --words "my base phrase" --method 2 --personal "name:John,date:1990-05-15"
+
+3. Using the Word Pattern method:
+   python seedgen.py --words "mix these words together in a pattern" --method 3
+
+4. Generate using completely random words:
+   python seedgen.py --random 20 --method 1
+
+5. Save the output to a file:
+   python seedgen.py --words "my phrase" --output myseed.txt
+
+6. Show detailed processing information:
+   python seedgen.py --words "my phrase" --method 1 --detail
+   (or use -d shorthand: --random 10 -d)
+
+METHODS EXPLAINED:
+
+1. Entropy Mixing (Default): Best for maximum randomness
+   Applies multiple hash algorithms in 1000 rounds of mixing
+
+2. Personal Mixer: Best for memorable seeds
+   Combines personal information with your words for unique results
+
+3. Word Pattern Mixing: Best for custom word patterns
+   Analyzes the pattern and relationships between your words
+
+SECURITY TIPS:
+
+* Use a mix of common and uncommon words for stronger seeds
+* Add personal details that only you would know
+* For highest security, generate seeds on an offline computer
+* Never share your seed with anyone

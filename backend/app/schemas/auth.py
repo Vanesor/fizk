@@ -64,3 +64,7 @@ class SchnorrLoginRequest(BaseModel):
     challengeHex: str
     R_hex: str = Field(..., description="Schnorr commitment (R point)")
     s_hex: str = Field(..., description="Schnorr response (s value)")
+
+class ResolveUserRequest(BaseModel):
+    identifier: str
+    is_email: bool = False
