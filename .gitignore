@@ -6,6 +6,8 @@ pyvenv.cfg
 .env
 __pycache__/
 Include/
+build/
+dist/
 Lib/
 Logs/
 .lock
@@ -29,6 +31,7 @@ node_modules/
 
 # production
 /build
+/dist
 
 # misc
 .DS_Store
